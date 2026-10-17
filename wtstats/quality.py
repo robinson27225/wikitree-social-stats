@@ -48,17 +48,16 @@ def rebuild_flags(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM data_flags")
 
     # A metric far below one it should not be below (e.g. Facebook views under viewers).
-    for platform, metric, other, factor in config.BELOW_CHECKS:
+    for platform, metric, other, factor, reason in config.BELOW_CHECKS:
+        why = reason or f"{metric} is {'lower than' if factor >= 1 else 'far below'} {other} that day; the export value cannot be right"
         conn.execute(
             """INSERT OR IGNORE INTO data_flags
-               SELECT 'daily', v.platform, v.period_start, v.metric,
-                      v.metric || ' is ' || CASE WHEN ? >= 1 THEN 'lower than ' ELSE 'far below ' END ||
-                      w.metric || ' that day; the export value cannot be right'
+               SELECT 'daily', v.platform, v.period_start, v.metric, ?
                FROM daily_metrics v JOIN daily_metrics w
                  ON w.platform = v.platform AND w.granularity = v.granularity
                 AND w.period_start = v.period_start AND w.metric = ?
                WHERE v.platform = ? AND v.granularity = 'day' AND v.metric = ? AND v.value < w.value * ?""",
-            (factor, other, platform, metric, factor),
+            (why, other, platform, metric, factor),
         )
 
     # Copy-paste columns: a month where one column mirrors another is not real data.
@@ -78,7 +77,7 @@ def rebuild_flags(conn: sqlite3.Connection) -> None:
             )
 
     # The same metric identical on two platforms: one sheet was pasted over the other, so flag both.
-    for plat_a, plat_b, metric in config.CROSS_PLATFORM_DUPLICATE_CHECKS:
+    for plat_a, plat_b, metric, flag in config.CROSS_PLATFORM_DUPLICATE_CHECKS:
         df = pd.read_sql_query(
             """SELECT a.period_start, a.value AS a, b.value AS b
                FROM daily_metrics a JOIN daily_metrics b
@@ -88,9 +87,11 @@ def rebuild_flags(conn: sqlite3.Connection) -> None:
         )
         for month, days in _mirrored_months(df):
             for platform, other in ((plat_a, plat_b), (plat_b, plat_a)):
+                if flag not in ("both", platform):
+                    continue
                 conn.executemany(
                     "INSERT OR IGNORE INTO data_flags VALUES ('daily', ?, ?, ?, ?)",
-                    [(platform, d, metric, f"identical to {other}'s {metric}; one sheet was pasted over the other")
+                    [(platform, d, metric, f"identical to {other}'s {metric}; copied from there, so not this channel's own figure" if flag != "both" else f"identical to {other}'s {metric}; one sheet was pasted over the other")
                      for d in days],
                 )
 

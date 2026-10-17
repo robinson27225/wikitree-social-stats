@@ -78,6 +78,9 @@ def detect_kind(columns: set[str]) -> tuple[str, str | None]:
         return "scheduler", None
     if config.YOUTUBE_SIGNATURE <= columns:
         return "youtube", "youtube"
+    for sig, platform in config.EXTRA_DAILY_SIGNATURES:
+        if sig <= columns:
+            return "daily", platform
     for platform, sig in config.DAILY_SIGNATURES.items():
         if sig <= columns:
             return "daily", platform
@@ -129,8 +132,9 @@ def classify_series(title: str) -> str:
 # --- loaders ----------------------------------------------------------------
 
 def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, import_id: int) -> tuple[int, int, str]:
-    if platform == "tiktok" and "new_followers" in df.columns and "followers" not in df.columns:
-        df = df.rename(columns={"new_followers": "followers"})  # same daily figure under its 2023 name
+    rename = {old: new for old, new in config.RENAME_METRICS.get(platform, {}).items() if old in df.columns and new not in df.columns}
+    if rename:
+        df = df.rename(columns=rename)  # the same figure under an older or different export's name
     drop = config.DROP_METRICS.get(platform, set())
     metrics = [c for c in df.columns if c != "date" and c not in drop]
     zero_fill = config.BLANK_MEANS_ZERO.get(platform, set())
@@ -257,25 +261,33 @@ def _cell_to_str(v) -> str:
     return str(v)
 
 
-def read_workbook(path: Path) -> list[tuple[str, pd.DataFrame]]:
-    """Every tab as (name, DataFrame of text cells) with normalised headers; columns without a header are dropped."""
+def _sheet_rows(path: Path) -> list[tuple[str, list[list]]]:
+    """Every tab as (name, rows of cell values). Reads .xlsx and the older .xls."""
+    if path.suffix.lower() == ".xls":
+        book = pd.ExcelFile(path, engine="xlrd")
+        return [(n, book.parse(n, header=None, dtype=str, keep_default_na=False).values.tolist()) for n in book.sheet_names]
     import openpyxl  # only needed when loading Excel files
 
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    out = [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+    wb.close()
+    return out
+
+
+def read_workbook(path: Path) -> list[tuple[str, pd.DataFrame]]:
+    """Every tab as (name, DataFrame of text cells) with normalised headers; columns without a header are dropped."""
     out = []
-    for ws in wb.worksheets:
-        rows = list(ws.iter_rows(values_only=True))
+    for title, rows in _sheet_rows(path):
         if not rows:
             continue
         keep, seen = [], set()
         for i, cell in enumerate(rows[0]):
-            h = normalize_header(cell) if cell is not None else ""
+            h = normalize_header(cell) if cell not in (None, "") else ""
             if h and h not in seen:  # a repeated header keeps its first column
                 seen.add(h)
                 keep.append((i, h))
         body = [[_cell_to_str(r[i]) if i < len(r) else "" for i, _ in keep] for r in rows[1:]]
-        out.append((ws.title, pd.DataFrame(body, columns=[h for _, h in keep], dtype=str)))
-    wb.close()
+        out.append((title, pd.DataFrame(body, columns=[h for _, h in keep], dtype=str)))
     return out
 
 
@@ -283,41 +295,51 @@ def _is_excluded(title: str) -> bool:
     return any(re.search(pat, title, flags=re.IGNORECASE) for pat in config.SKIP_SHEET_PATTERNS)
 
 
-def _archive_workbook(path: Path, archived: Path, excluded: list[str]) -> None:
-    """Keep an untouched copy, minus tabs that were left out on purpose (the repository is public)."""
-    if not excluded:
-        shutil.copy2(path, archived)
-        return
+def _archive_workbook(path: Path, archived: Path, keep: list[str]) -> None:
+    """Save the tabs that were loaded, as .xlsx. Tabs that were not loaded are not kept (the repository is public)."""
     import openpyxl
 
-    wb = openpyxl.load_workbook(path, data_only=True)  # cell values; the tabs that were loaded are otherwise unchanged
-    for title in excluded:
-        del wb[title]
+    keep_set = set(keep)
+    if path.suffix.lower() == ".xlsx":
+        wb = openpyxl.load_workbook(path, data_only=True)  # cell values; the kept tabs are otherwise unchanged
+        for title in [t for t in wb.sheetnames if t not in keep_set]:
+            del wb[title]
+    else:
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        for title, rows in _sheet_rows(path):
+            if title in keep_set:
+                ws = wb.create_sheet(title[:31])
+                for r in rows:
+                    ws.append(list(r))
     wb.save(archived)
 
 
 def import_workbook(conn: sqlite3.Connection, path: Path, *, raw_dir: Path, force: bool = False) -> dict:
     """Load every recognised daily-channel tab of an Excel file. Each tab is logged as its own import."""
     digest = sha256_file(path)
-    sheets = read_workbook(path)
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    archived = raw_dir / f"{digest[:8]}_{path.name}"
-    if not archived.exists():
-        _archive_workbook(path, archived, [t for t, _ in sheets if _is_excluded(t)])
-
-    results = []
-    for title, df in sheets:
-        entry = {"sheet": title}
+    plan = []  # (title, df, platform or None, why not)
+    for title, df in read_workbook(path):
         if _is_excluded(title):
-            results.append({**entry, "status": "skipped", "reason": "left out on purpose (Twitter)"})
+            plan.append((title, df, None, "left out on purpose (Twitter)"))
             continue
         try:
             kind, platform = detect_kind(set(df.columns))
         except ImportError_:
-            results.append({**entry, "status": "skipped", "reason": "not a recognised channel sheet"})
+            plan.append((title, df, None, "not a recognised channel sheet"))
             continue
-        if kind != "daily":
-            results.append({**entry, "status": "skipped", "reason": f"a {kind} file, not a daily channel sheet"})
+        plan.append((title, df, platform if kind == "daily" else None, None if kind == "daily" else f"a {kind} file, not a daily channel sheet"))
+
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    archived = raw_dir / f"{digest[:8]}_{path.name if path.suffix.lower() == '.xlsx' else path.stem + '.xlsx'}"
+    if not archived.exists():
+        _archive_workbook(path, archived, [t for t, _, plat, _ in plan if plat])
+
+    results = []
+    for title, df, platform, why in plan:
+        entry = {"sheet": title}
+        if platform is None:
+            results.append({**entry, "status": "skipped", "reason": why})
             continue
         sheet_sha = f"{digest}:{title}"  # one log row per tab, so the checksum includes the tab name
         seen = conn.execute("SELECT id FROM import_log WHERE sha256 = ?", (sheet_sha,)).fetchone()
@@ -341,9 +363,9 @@ def import_workbook(conn: sqlite3.Connection, path: Path, *, raw_dir: Path, forc
     quality.derive_tiktok_follower_change(conn)
     quality.rebuild_flags(conn)
     conn.commit()
-    return {"status": "imported" if any(r["status"] == "imported" for r in results) else "skipped",
-            "file": path.name, "kind": "workbook", "sheets": results,
-            "reason": "no new sheets" if not any(r["status"] == "imported" for r in results) else None}
+    imported = any(r["status"] == "imported" for r in results)
+    return {"status": "imported" if imported else "skipped", "file": path.name, "kind": "workbook", "sheets": results,
+            "reason": None if imported else "no new sheets"}
 
 
 # --- orchestration ----------------------------------------------------------
@@ -381,7 +403,7 @@ def import_file(
     if seen and not force:
         return {"status": "skipped", "file": path.name, "reason": f"already imported as {seen[1]!r}"}
 
-    if path.suffix.lower() in (".xlsx", ".xlsm"):
+    if path.suffix.lower() in (".xlsx", ".xlsm", ".xls"):
         return import_workbook(conn, path, raw_dir=raw_dir, force=force)
 
     df = read_csv(path)

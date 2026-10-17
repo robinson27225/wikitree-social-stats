@@ -114,11 +114,46 @@ def test_repeated_header_and_date_only_block_below_the_data_are_ignored(env):
     assert rows(conn, "SELECT COUNT(DISTINCT period_start) FROM daily_metrics") == [(1,)]
 
 
-def test_archived_workbook_leaves_out_the_twitter_tabs(env):
+def test_archived_workbook_keeps_only_the_tabs_that_were_loaded(env):
     conn, raw, tmp = env
     make_workbook(tmp / "Archive.xlsx")
     import_file(conn, tmp / "Archive.xlsx", raw_dir=raw)
     (archived,) = raw.glob("*_Archive.xlsx")
     kept = openpyxl.load_workbook(archived, read_only=True).sheetnames
-    assert "Copy of WTC TW 2024Daily" not in kept and "Copy of FB 2021Daily" in kept and "Notes" in kept
-    assert len(openpyxl.load_workbook(tmp / "Archive.xlsx", read_only=True).sheetnames) == len(kept) + 1  # the original is untouched
+    assert kept == ["Copy of FB 2021Daily", "Copy of IG 2023Daily", "Copy of TT 2023Daily", "LI 2023Daily"]  # no Twitter, no scratch tab
+    assert len(openpyxl.load_workbook(tmp / "Archive.xlsx", read_only=True).sheetnames) == 6  # the original is untouched
+    # the archived copy loads to exactly the same data
+    from wtstats import db as _db
+    other = _db.connect(tmp / "other.db")
+    import_file(other, archived, raw_dir=tmp / "raw2")
+    q = "SELECT platform, period_start, metric, value FROM daily_metrics ORDER BY 1, 2, 3"
+    assert other.execute(q).fetchall() == conn.execute(q).fetchall()
+
+
+def test_linkedin_blank_cells_are_zero(env):
+    conn, raw, tmp = env
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "LI 2025Daily"
+    ws.append(["Date", "Impressions ", "Clicks ", "Reactions ", "Comments ", "Reposts ", "Engagement rate ", "Overview page views (total)",
+               "Overview unique visitors (total)", "Total page views (total)", "Total unique visitors (total)", "followers"])
+    ws.append(["07/30/2025", 20, 1, 2, 1, 0, 0.1, 1, 1, 1, 1, None])
+    ws.append(["07/31/2025", 18, 0, 1, None, None, 0.05, 0, 0, 0, 0, None])   # comments and reposts blank; followers never filled in
+    wb.save(tmp / "li.xlsx")
+    import_file(conn, tmp / "li.xlsx", raw_dir=raw)
+    assert rows(conn, "SELECT metric, value FROM daily_metrics WHERE platform='linkedin' AND period_start='2025-07-31' "
+                      "AND metric IN ('comments','reposts') ORDER BY 1") == [("comments", 0.0), ("reposts", 0.0)]
+    # the manually entered followers column is not zero-filled: blank there means "not recorded"
+    assert rows(conn, "SELECT COUNT(*) FROM daily_metrics WHERE platform='linkedin' AND metric='followers'") == [(0,)]
+
+
+def test_linkedin_follower_export_xls_loads_as_followers_and_skips_the_demographic_tabs(env):
+    import shutil
+    conn, raw, tmp = env
+    shutil.copy("tests/fixtures/linkedin_followers_synthetic.xls", tmp / "wikitree_followers_123.xls")
+    r = import_file(conn, tmp / "wikitree_followers_123.xls", raw_dir=raw)
+    assert {s["sheet"]: s["status"] for s in r["sheets"]} == {"New followers": "imported", "Location": "skipped"}
+    assert rows(conn, "SELECT period_start, metric, value FROM daily_metrics ORDER BY 1") == [
+        ("2025-10-16", "followers", 0.0), ("2025-10-17", "followers", 2.0), ("2025-10-18", "followers", -1.0), ("2025-10-19", "followers", 3.0)]
+    (archived,) = raw.glob("*_wikitree_followers_123.xlsx")           # an .xls is archived as .xlsx, loaded tab only
+    assert openpyxl.load_workbook(archived, read_only=True).sheetnames == ["New followers"]

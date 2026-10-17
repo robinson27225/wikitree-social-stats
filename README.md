@@ -19,7 +19,7 @@ Each file is recognised by its columns, so you do not say which channel it is:
 | File | Kept as |
 |---|---|
 | Facebook / Instagram / TikTok / LinkedIn daily (or monthly) sheet, as CSV | account-level numbers, one row per channel, period and metric |
-| Excel workbook (`.xlsx`) with one tab per channel and year | every recognised tab loaded the same way; Twitter tabs and other tabs are skipped and reported |
+| Excel workbook (`.xlsx`, or the older `.xls` such as LinkedIn's follower export) | every recognised tab loaded the same way; Twitter tabs and other tabs are skipped and reported |
 | Scheduler export (`date,channel,platform,posts,views,...`) | totals for the posts published on that day, per channel |
 | YouTube table export (one file per month, from a saved view) | per-video numbers for the period the file covers |
 
@@ -34,26 +34,28 @@ Each file is recognised by its columns, so you do not say which channel it is:
 - A YouTube export lists at most 500 videos (the top 500 by likes). A video missing from a month is not necessarily zero.
 - **To undo an import:** `python -m wtstats remove <part of the file name>` shows what would go; add `--yes` to delete
   that file's data, its import-log entry and its archived copy. Values a later file replaced stay.
-- **Excel workbooks:** each tab is logged as its own import. The archived copy leaves out tabs that were skipped on purpose
-  (Twitter, see `SKIP_SHEET_PATTERNS`), because the repository is public. Older header names are mapped onto the current
-  ones (`Impressions (total)` -> `impressions`, TikTok 2023 `New Followers` -> daily follower change); a repeated header or
-  date-only block further down a tab is ignored.
+- **Excel workbooks:** each tab is logged as its own import. The archived copy keeps only the tabs that were loaded
+  (saved as `.xlsx`): Twitter tabs (see `SKIP_SHEET_PATTERNS`) and other tabs, such as LinkedIn's follower demographics, are
+  not kept, because the repository is public. Older header names are mapped onto the current ones
+  (`Impressions (total)` -> `impressions`; TikTok 2023 `New Followers` and LinkedIn's `Total followers` -> the daily follower
+  change); a repeated header or date-only block further down a tab is ignored.
 - Monthly history files work the same way; a date like `2026-01` or `Jan 2026` is stored as a month.
 
 ## How the numbers are handled
 
 - Empty future rows (the sheets are pre-filled to Dec 31) are skipped, not stored as zeros.
 - Numbers with thousands separators (`"2,299"`) are read correctly.
-- **Instagram:** a blank *New Followers* is stored as 0.
+- **Blanks:** an Instagram *New Followers* blank and a blank in any LinkedIn count (impressions, clicks, reactions, comments, reposts, page views, visitors) are stored as 0. A blank anywhere else is "not recorded", not zero. LinkedIn *followers* is entered by hand, so a blank there stays blank.
 - **TikTok:** *Followers* was a daily change until Aug 31, 2026 and a running total after. The total is stored as `followers_total`; the daily change after the cutover is derived from consecutive days. The cutover date is `TIKTOK_FOLLOWERS_TOTAL_FROM` in `wtstats/config.py`.
 - **LinkedIn:** the engagement rate is not stored (recompute it from the counts).
 - **Flagged values** are kept in the database but left out of the charts, and listed on the *Data & quality* tab:
   - Facebook *Views* below *Viewers* (Apr 2-3, 2026);
-  - Facebook *Reach* far below *Viewers* (Sep 2025: Reach collapses while Viewers carries on);
+  - Facebook *Reach* in Sep 2025, when it drops to about a tenth of *Viewers* (Facebook's own export confirms the numbers, so they are real, just no longer comparable with earlier Reach; *Viewers* is used instead);
   - columns copied from another (Facebook *Link Clicks* = *Page Visits* in Jan 2026; Instagram *New Followers* = *Profile Visits* in Oct 2022);
-  - Facebook and Instagram *Interactions*, identical Jan 1 - Aug 31, 2024 (both flagged, because we can't tell which sheet is right).
+  - Instagram *Interactions* Jan 1 - Aug 31, 2024, a copy of Facebook's (Facebook's are real; Instagram's should be blank).
   The rules and thresholds are in `wtstats/config.py`.
-- **People reached** for Facebook is Reach through Aug 2025 and Viewers after (they agree in Aug 2025, when both were recorded).
+- **People reached** for Facebook is Reach through Aug 2025 and Viewers from Sep 2025 (they agree in Aug 2025, when both were recorded). The chart marks the change with a dotted line (`CHART_BREAKS` in `wtstats/config.py`).
+- **LinkedIn followers** come from the manually filled sheets through Dec 2024 and LinkedIn's own export from Oct 16, 2025; nothing was recorded in between (the Data tab lists it as a gap).
 - **Gaps** (days with no value) are listed on the *Data & quality* tab. A blank is not a zero, so totals that include them are understated.
 - Small negatives (-1) in TikTok comments and LinkedIn comments or reposts are deletions in the export and are kept; follower changes are net and can be negative.
 - Scheduler totals are as of the export and are kept apart from the account-level numbers, because they measure different things.

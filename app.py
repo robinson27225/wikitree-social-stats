@@ -122,6 +122,7 @@ def multiples(panels: list[dict], ncols: int = 2, panel_height: int = 230) -> go
         rows=nrows, cols=ncols, subplot_titles=[p["title"] for p in panels],
         vertical_spacing=0.34 / nrows if nrows > 1 else 0.1, horizontal_spacing=0.07,
     )
+    fig.update_annotations(font=dict(size=13, color=INK))  # the panel titles; set before any other annotation is added
     for i, p in enumerate(panels):
         r, c = divmod(i, ncols)
         x, y = p["x"], p["y"]
@@ -140,6 +141,13 @@ def multiples(panels: list[dict], ncols: int = 2, panel_height: int = 230) -> go
                                      hovertemplate="%{x|%b %d, %Y}<br>%{y:,.0f}<extra></extra>"), row=r + 1, col=c + 1)
         lo = min(0, float(pd.Series(y).min())) if len(y) else 0
         fig.update_yaxes(rangemode="tozero" if lo == 0 else "normal", row=r + 1, col=c + 1)
+        axis = i + 1 if i else ""  # the i-th panel's axes are x/y, x2/y2, ...
+        for when, note in p.get("breaks", []):  # a dotted line where the measure changes
+            if len(x) and pd.Timestamp(x.min()) < pd.Timestamp(when) <= pd.Timestamp(x.max()):
+                fig.add_shape(type="line", x0=when, x1=when, y0=0, y1=1, xref=f"x{axis}", yref=f"y{axis} domain",
+                              line=dict(color=INK_3, width=1.5, dash="dot"))
+                fig.add_annotation(x=when, y=1, xref=f"x{axis}", yref=f"y{axis} domain", text=note, showarrow=False,
+                                   xanchor="left", yanchor="top", xshift=4, font=dict(size=11, color=INK_2))
     fig.update_layout(
         height=max(panel_height * nrows, 260), margin=dict(l=8, r=8, t=36, b=8),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", hovermode="x",
@@ -148,7 +156,6 @@ def multiples(panels: list[dict], ncols: int = 2, panel_height: int = 230) -> go
     )
     fig.update_xaxes(showgrid=False, linecolor=GRID, tickfont=dict(color=INK_3))
     fig.update_yaxes(gridcolor=GRID, zeroline=False, tickfont=dict(color=INK_3), separatethousands=True)
-    fig.update_annotations(font=dict(size=13, color=INK))
     return fig
 
 
@@ -181,9 +188,11 @@ st.title("WikiTree Social Stats")
 with st.sidebar:
     st.header("View")
     lo, hi = day_rows.period_start.min().date(), day_rows.period_start.max().date()
-    start_default = max(lo, hi - timedelta(days=89))
-    rng = st.date_input("Date range", (start_default, hi), min_value=lo, max_value=hi,
-                        help="Applies to the account-level charts. Data currently ends " + hi.strftime("%b %d, %Y") + ".")
+    lasts = sorted(day_rows.groupby("platform")["period_start"].max())
+    end_default = lasts[len(lasts) // 2].date()  # most channels' last day, not the one channel that runs a little longer
+    start_default = max(lo, end_default - timedelta(days=89))
+    rng = st.date_input("Date range", (start_default, end_default), min_value=lo, max_value=hi,
+                        help="Applies to the account-level charts. Data runs to " + hi.strftime("%b %d, %Y") + ".")
     rollup = st.radio("Roll up by", ["Day", "Week", "Month"], horizontal=True, index=0)
     st.caption("Weeks start on Monday. The first and last bucket of a range can be partial.")
     st.divider()
@@ -192,7 +201,7 @@ with st.sidebar:
 if isinstance(rng, tuple) and len(rng) == 2:
     d0, d1 = pd.Timestamp(rng[0]), pd.Timestamp(rng[1])
 else:
-    d0, d1 = pd.Timestamp(start_default), pd.Timestamp(hi)
+    d0, d1 = pd.Timestamp(start_default), pd.Timestamp(end_default)
 
 tab_over, tab_chan, tab_posts, tab_yt, tab_data = st.tabs(["Overview", "Channels", "Posts", "YouTube", "Data & quality"])
 
@@ -223,7 +232,8 @@ with tab_over:
             continue
         s = g.set_index("bucket")["value"]
         panels.append(dict(title=config.LABELS[platform], color=config.COLORS[platform], x=g.bucket, y=g.value,
-                           avg=smooth7(s).values if rollup == "Day" else None))
+                           avg=smooth7(s).values if rollup == "Day" else None,
+                           breaks=config.CHART_BREAKS.get((fam_key, platform), [])))
     if panels:
         st.subheader(f"{label}, by {rollup.lower()}")
         if rollup == "Day":

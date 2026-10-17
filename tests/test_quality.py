@@ -21,15 +21,27 @@ def flags(conn):
     return conn.execute("SELECT platform, period_start, metric FROM data_flags").fetchall()
 
 
-def test_same_interactions_on_facebook_and_instagram_flags_both(conn):
+def _two_months_of_interactions(conn):
     vals = [100 + (i * 7) % 40 for i in range(31)]            # January 2024: identical on both
     put(conn, "facebook", "interactions", vals); put(conn, "instagram", "interactions", vals)
     put(conn, "facebook", "interactions", [50 + i for i in range(29)], start="2024-02-01")   # February: genuinely different
     put(conn, "instagram", "interactions", [10 + 2 * i for i in range(29)], start="2024-02-01")
+
+
+def test_interactions_copied_into_instagram_flags_only_the_side_that_is_wrong(conn):
+    _two_months_of_interactions(conn)
     quality.rebuild_flags(conn)
     got = flags(conn)
-    assert {p for p, d, m in got if d.startswith("2024-01")} == {"facebook", "instagram"}
+    assert {p for p, d, m in got if d.startswith("2024-01")} == {"instagram"}      # Facebook's are real
     assert not [f for f in got if f[1].startswith("2024-02")]
+
+
+def test_cross_platform_duplicate_flags_both_when_it_is_not_known_which_is_right(conn, monkeypatch):
+    from wtstats import config
+    monkeypatch.setattr(config, "CROSS_PLATFORM_DUPLICATE_CHECKS", [("facebook", "instagram", "interactions", "both")])
+    _two_months_of_interactions(conn)
+    quality.rebuild_flags(conn)
+    assert {p for p, d, m in flags(conn) if d.startswith("2024-01")} == {"facebook", "instagram"}
 
 
 def test_instagram_new_followers_copied_from_profile_visits_is_flagged_for_that_month(conn):
