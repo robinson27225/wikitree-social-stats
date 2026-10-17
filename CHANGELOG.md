@@ -2,6 +2,15 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.2.0 - 2026-10-17
+
+- YouTube: channel subscribers *and views* by month (Jan 2022 - Sep 2026), shown by Month, Year or Year over year.
+- YouTube: monthly per-video exports for Jan - Jun and Sep 2026 loaded.
+- New series: #OnePlaceWednesday, #GenealogyCollaborationHour, WikiTree Easter Egg Hunt, #FridayDateNight, #Hacktoberfest,
+  WikiTree Symposium, RootsTech, WikiTree Tours, WikiTree Profile Improvement Project, WikiTree New Members, WikiTree Heritage
+  Exchange. LiveCasts and "Live with Sarah and Eowyn" are filed under WikiTree Saturday Roundup.
+- YouTube tab: show videos, community posts, or both.
+
 ## 1.1.1 - 2026-10-17
 
 - YouTube series reorganised to follow the channel's playlists: each format is its own series (WikiTree Week, WikiGames,

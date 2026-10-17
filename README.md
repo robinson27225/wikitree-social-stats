@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.1.1 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.2.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -90,9 +90,12 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
   Link Builders, Ask Aleš and Member Q&A). Where a title *starts* decides between look-alikes: "#ConnectionFinder: ..." is
   ConnectionFinder, while "Are you related ..." is Spotlight Profile Shorts even when it ends with the #ConnectionFinder tag.
   Videos that match no rule are listed as "Other".
-- **Channel subscribers.** Export the channel's *Subscribers* by month from YouTube Studio (columns `Date`, `Subscribers`) and run
-  `python -m wtstats import --monthly "Chart data.csv"`. `--monthly` treats every row as a whole month, whatever its date looks like.
-  This is the whole channel, so it is higher than the per-video *Subscribers gained*, which only counts the (up to 500) videos listed.
+- **Channel subscribers and views.** The whole channel's net subscribers and views per month. Export them from YouTube Studio (or keep
+  a sheet) as `Date,Subscribers,Views` and run `python -m wtstats import --monthly "Chart data.csv"`. `--monthly` treats every row as a
+  whole month, whatever its date looks like. A month's figures equal the *Total* row of that month's per-video export, and are higher than
+  the sum of the per-video numbers, which only count the (up to 500) videos listed.
+- **Community posts.** The export mixes videos with community-page posts. It has no column for that, so any item with a duration of exactly
+  16 seconds (`COMMUNITY_POST_DURATION_S`) is shown as a community post; the YouTube tab can show videos, posts or both.
 
 ## Hosting (Streamlit Community Cloud)
 

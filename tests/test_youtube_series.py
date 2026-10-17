@@ -35,6 +35,22 @@ def env(tmp_path, monkeypatch):
     ("#OneNameTuesday showcase: Sheldon", "One Name Tuesday"),
     ("Project Showcase: England This project was started on WikiTree in 2018", "Project Showcase"),
     ("What is WikiTree?", "Other"),
+    ("#OnePlaceWednesday showcase: Avalon, California Explore the lives & stories", "#OnePlaceWednesday"),
+    ("\U0001f333 Genealogy is better together! #GenealogyCollaborationHour TODAY at 5 PM ET", "#GenealogyCollaborationHour"),
+    ("No need to swipe right! #FridayDateNight is hunting profiles with no dates", "#FridayDateNight"),
+    ("WikiTree #Hacktoberfest2025 Week 1", "#Hacktoberfest"),
+    # LiveCasts and Live with Sarah and Eowyn are the Saturday Roundup (owner's choice), even a LiveCast at RootsTech
+    ("WikiTree LiveCast (19 September 2020) - Weekly recap + tree chat about cousin bait", "WikiTree Saturday Roundup"),
+    ("WikiTree Live with Sarah and Eowyn - Special Guest Susie MacLeod", "WikiTree Saturday Roundup"),
+    ("LiveCast at RootsTech 2017", "WikiTree Saturday Roundup"),
+    ("WikiTree at @familysearch #RootsTech2025 Take a tour of the booth", "RootsTech"),
+    ("2024 WikiTree Symposium Countdown - 6 days to go!", "WikiTree Symposium"),
+    ("#WikiTreeTours: The Power of the WikiTree Browser Extension", "WikiTree Tours"),
+    ("Tree Tours - Exploring the New WikiTree!", "WikiTree Tours"),
+    ("WikiTree Profile Improvement Project: Legacy Team (January 2026)", "WikiTree Profile Improvement Project"),
+    ("New Member Chat (September 2025)", "WikiTree New Members"),
+    ("WikiTree Heritage Exchange Video Series: #1 Intro to Heritage Exchange", "WikiTree Heritage Exchange"),
+    ("WikiTree Easter Egg Hunt (2026)", "WikiTree Easter Egg Hunt"),
 ])
 def test_series_rules_follow_the_owners_decisions(title, series):
     assert title_series(title) == series

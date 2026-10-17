@@ -79,17 +79,19 @@ def load_posts(version: float) -> pd.DataFrame:
 def load_youtube(version: float) -> pd.DataFrame:
     """One row per video, period and metric."""
     df = _query(
-        """SELECT s.video_id, v.title, v.published_date, v.series, s.period_start, s.period_end, s.metric, s.value
+        """SELECT s.video_id, v.title, v.published_date, v.series, v.duration_s, s.period_start, s.period_end,
+                  s.metric, s.value
            FROM youtube_stats s JOIN youtube_videos v USING (video_id)"""
     )
     df["published_date"] = pd.to_datetime(df["published_date"])
+    df["kind"] = (df.pop("duration_s") == config.COMMUNITY_POST_DURATION_S).map({True: "Community post", False: "Video"})
     return df
 
 
 @st.cache_data
-def load_channel(version: float) -> pd.DataFrame:
-    """The YouTube channel's own subscribers per month (net gained), from a Date + Subscribers export."""
-    df = _query("SELECT granularity, period_start, value FROM daily_metrics WHERE platform = 'youtube' AND metric = 'subscribers'")
+def load_channel(version: float, metric: str = "subscribers") -> pd.DataFrame:
+    """One of the YouTube channel's own measures per month (subscribers gained, views), from its Date + Subscribers + Views export."""
+    df = _query("SELECT granularity, period_start, value FROM daily_metrics WHERE platform = 'youtube' AND metric = ?", (metric,))
     if df.empty:
         return pd.DataFrame(columns=["period_start", "value"])
     df["period_start"] = pd.to_datetime(df["period_start"])
@@ -545,8 +547,17 @@ def span_label(start: pd.Timestamp, end: pd.Timestamp, is_month: bool) -> str:
 
 
 with tab_yt:
+    shown = "Videos and posts"
     if yt.empty:
         st.info("No YouTube export loaded yet.")
+    else:
+        # Community-page posts are in the same export; the export has no flag, so they are told apart by a placeholder duration.
+        shown = st.radio("Show", ["Videos and posts", "Videos only", "Community posts only"], horizontal=True, key="yt_kind")
+        if shown != "Videos and posts":
+            yt = yt[yt.kind == ("Video" if shown == "Videos only" else "Community post")]
+    if yt.empty:
+        if shown != "Videos and posts":
+            st.info("Nothing of that kind in the loaded exports.")
     else:
         spans = yt[["period_start", "period_end"]].drop_duplicates().copy()
         spans["start"], spans["end"] = pd.to_datetime(spans.period_start), pd.to_datetime(spans.period_end)
@@ -560,9 +571,9 @@ with tab_yt:
         sel = spans[spans.label == label].iloc[0]
         cur = yt[(yt.period_start == sel.period_start) & (yt.period_end == sel.period_end)]
         wide = cur.pivot(index="video_id", columns="metric", values="value").reset_index().merge(
-            yt.drop_duplicates("video_id")[["video_id", "title", "published_date", "series"]], on="video_id")
+            yt.drop_duplicates("video_id")[["video_id", "title", "published_date", "series", "kind"]], on="video_id")
         have = [m for m in YT_NAMES if m in wide.columns] + [m for m in wide.columns if m not in YT_NAMES and m not in
-                                                              {"video_id", "title", "published_date", "series"}]
+                                                              {"video_id", "title", "published_date", "series", "kind"}]
         name = lambda m: YT_NAMES.get(m, m.replace("_", " ").capitalize())
         metric = c2.selectbox("Measure", have, format_func=name)
         if sel.is_month:
@@ -593,14 +604,18 @@ with tab_yt:
             month_group_view(in_months[["period_start", "value", "series"]], name(metric), "yt_group", True)
             st.caption("Each month counts the videos listed in that month's export (up to 500).")
 
-        st.subheader("Channel subscribers")
-        chan = load_channel(ver)
-        if chan.empty:
-            st.info("No channel-level subscriber numbers loaded yet. Import the channel's Date + Subscribers export from YouTube "
-                    "Studio (`python -m wtstats import --monthly file.csv`). The per-video Subscribers above only count the videos listed.")
+        st.subheader("Channel subscribers and views")
+        chan_subs, chan_views = load_channel(ver, "subscribers"), load_channel(ver, "views")
+        if chan_subs.empty and chan_views.empty:
+            st.info("No channel-level numbers loaded yet. Import the channel's monthly Date, Subscribers and Views export "
+                    "(`python -m wtstats import --monthly file.csv`). The per-video numbers above only count the videos listed.")
         else:
-            st.caption("Net subscribers gained per month, for the whole channel.")
-            month_group_view(chan, "Subscribers", "yt_subs_group", False)
+            st.caption("The whole channel, per month: net subscribers gained and views. The per-video numbers above only count "
+                       "the (up to 500) videos listed in each export.")
+            for chan, what, key in ((chan_subs, "Subscribers", "yt_subs_group"), (chan_views, "Views", "yt_chanviews_group")):
+                if not chan.empty:
+                    st.markdown(f"**{what}**")
+                    month_group_view(chan, what, key, False)
 
         st.subheader("Videos")
         f1, f2 = st.columns([2, 3])
@@ -610,9 +625,9 @@ with tab_yt:
         if q:
             v = v[v.title.str.contains(q, case=False, regex=False)]
         v = v.sort_values(metric, ascending=False).head(200)
-        show_cols = ["title", "series", "published_date"] + have
+        show_cols = ["title", "kind", "series", "published_date"] + have
         st.dataframe(
-            v[show_cols].rename(columns={"title": "Title", "series": "Series", "published_date": "Published", **{m: name(m) for m in have}}),
+            v[show_cols].rename(columns={"title": "Title", "kind": "Type", "series": "Series", "published_date": "Published", **{m: name(m) for m in have}}),
             width="stretch", hide_index=True,
             column_config={"Published": st.column_config.DateColumn(format="MMM D, YYYY"),
                            **{name(m): st.column_config.NumberColumn(format="%.1f" if m == "watch_time_hours" else "localized")

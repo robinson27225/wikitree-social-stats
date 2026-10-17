@@ -164,8 +164,25 @@ SERIES_RULES = [
     ("Research Parties", r"research part(y|ies)"),
     ("One Name Tuesday", r"one\s*name\s*tuesday"),
     ("Project Showcase", r"project showcase"),
+    ("#OnePlaceWednesday", r"one\s*place\s*wednesday"),
+    ("#GenealogyCollaborationHour", r"genealogy\s*collaboration\s*hour"),
+    ("WikiTree Easter Egg Hunt", r"easter egg hunt"),
+    ("#FridayDateNight", r"friday\s*date\s*night"),
+    ("#Hacktoberfest", r"hacktoberfest"),
+    # LiveCasts and "Live with Sarah and Eowyn" are the Saturday Roundup (the owner's choice), so they come before RootsTech
+    ("WikiTree Saturday Roundup", r"live\s*cast|live with sarah"),
+    ("WikiTree Symposium", r"symposium"),
+    ("RootsTech", r"rootstech"),
+    ("WikiTree Tours", r"(wikitree|tree)\s*tours?"),
+    ("WikiTree Profile Improvement Project", r"profile improvement"),
+    ("WikiTree New Members", r"new member (chat|orientation)"),
+    ("WikiTree Heritage Exchange", r"heritage exchange"),
     ("WikiTree How To", r"\bhow[- ]?to\b|tutorial"),
 ]
+
+# The export has no "is this a post" column. Community-page posts show up with this placeholder duration (138 of the
+# ~1,270 items have exactly 16 seconds, across every series), so they are labelled from it.
+COMMUNITY_POST_DURATION_S = 16
 OTHER_SERIES = "Other"
 
 # Running totals: weeks and months take the last value, not the sum, and year-over-year leaves them out.
