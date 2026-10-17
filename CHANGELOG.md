@@ -2,6 +2,12 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.2.2 - 2026-10-17
+
+- Channel subscribers and views per month now always come from the month's per-video export (its Total row); a sheet only
+  fills months that have no export, and never replaces one.
+- YouTube monthly exports May - Sep 2025 loaded.
+
 ## 1.2.1 - 2026-10-17
 
 - YouTube: a series that gained no subscribers is left off the *Subscribers gained* charts.

@@ -159,3 +159,30 @@ def test_the_per_video_table_is_still_told_apart_from_a_subscribers_file(env):
     f = tmp / "WikiTreers_YT_July_2026.csv"; f.write_text(YT)
     r = import_file(conn, f, raw_dir=raw)
     assert r["kind"] == "youtube"
+
+
+YT_TOTAL = '''Content,Video title,Video publish time,Duration,Likes,Views,Subscribers
+Total,,,,8,180,7
+aaaaaaaaaaa,WikiTree Tech Talk (April 2026),"Apr 28, 2026",3600,5,100,4
+bbbbbbbbbbb,Member Q & A via Zoom (Jul 2026) 1 of 2,"Jul 2, 2026",3000,3,80,3
+Showing top 500 results
+'''
+SHEET = "Date,Subscribers,Views\n2026-07,9,200\n2026-06,5,150\n"
+
+
+def _channel(conn):
+    return dict(((p, m), v) for p, m, v in conn.execute(
+        "SELECT period_start, metric, value FROM daily_metrics WHERE platform='youtube' AND granularity='month'"))
+
+
+@pytest.mark.parametrize("sheet_first", [True, False])
+def test_a_months_export_total_beats_the_sheet_whatever_the_order(env, sheet_first):
+    conn, raw, tmp = env
+    sheet = tmp / "channel.csv"; sheet.write_text(SHEET)
+    export = tmp / "WikiTreers_YT_July_2026.csv"; export.write_text(YT_TOTAL)
+    order = [lambda: import_file(conn, sheet, raw_dir=raw, monthly=True), lambda: import_file(conn, export, raw_dir=raw)]
+    for step in (order if sheet_first else order[::-1]):
+        step()
+    ch = _channel(conn)
+    assert (ch["2026-07-01", "views"], ch["2026-07-01", "subscribers"]) == (180, 7)   # the export's Total row
+    assert (ch["2026-06-01", "views"], ch["2026-06-01", "subscribers"]) == (150, 5)   # no export that month: the sheet

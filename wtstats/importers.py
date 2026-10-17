@@ -12,7 +12,7 @@ import io
 import re
 import shutil
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -231,6 +231,12 @@ def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, impo
                 key = "followers_total" if start >= config.TIKTOK_FOLLOWERS_TOTAL_FROM else "followers_change"
                 values[key] = v
         out += [(platform, gran, start, m, v, import_id) for m, v in values.items() if v is not None]
+    if platform == "youtube":
+        # A month's export Total row is the channel's number for that month, so a sheet never replaces it.
+        exported = {(g, s, m) for g, s, m in conn.execute(
+            """SELECT d.granularity, d.period_start, d.metric FROM daily_metrics d JOIN import_log l ON l.id = d.import_id
+               WHERE d.platform = 'youtube' AND l.kind = 'youtube'""")}
+        out = [r for r in out if (r[1], r[2], r[3]) not in exported]
     conn.executemany(
         """INSERT INTO daily_metrics (platform, granularity, period_start, metric, value, import_id)
            VALUES (?,?,?,?,?,?)
@@ -278,6 +284,7 @@ _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 _FOOTER = re.compile(r"showing top (\d+) results", re.IGNORECASE)
 
 
+CHANNEL_TOTAL_METRICS = ("views", "subscribers")
 _YOUTUBE_META = {"content", "video_title", "video_publish_time", "duration", *config.PLAYLIST_COLUMNS}
 
 
@@ -308,6 +315,22 @@ def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, p
             v = parse_number(rec[m])
             if v is not None:
                 stats.append((vid, period[0], period[1], m, v, import_id))
+    # The Total row is the whole channel for the month (every video, not just the listed 500). It is the channel's monthly
+    # number and always wins over a sheet (see import_daily).
+    start, end = datetime.fromisoformat(period[0]), datetime.fromisoformat(period[1])
+    if start.day == 1 and (end + timedelta(days=1)).day == 1 and start.month == end.month:
+        total = df[df["content"].map(lambda c: str(c).strip().lower() == "total")]
+        if len(total):
+            totals = [("youtube", "month", period[0], m, v, import_id) for m in CHANNEL_TOTAL_METRICS
+                      if m in total.columns and (v := parse_number(total.iloc[0][m])) is not None]
+            conn.executemany(
+                """INSERT INTO daily_metrics (platform, granularity, period_start, metric, value, import_id)
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT (platform, granularity, period_start, metric)
+                   DO UPDATE SET value = excluded.value, import_id = excluded.import_id""",
+                totals)
+            if totals:
+                notes.append("channel subscribers and views taken from the Total row")
     conn.executemany(
         """INSERT INTO youtube_videos (video_id, title, published_date, duration_s, series, playlist) VALUES (?,?,?,?,?,?)
            ON CONFLICT (video_id) DO UPDATE SET title = excluded.title, published_date = excluded.published_date,
