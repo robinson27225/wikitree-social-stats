@@ -43,3 +43,24 @@ def test_a_redeploy_that_leaves_old_modules_in_memory_cannot_break_the_app():
         assert not at.exception, [e.value for e in at.exception]
     finally:
         sys.modules.update(saved)
+
+
+def test_series_that_gained_no_subscribers_are_left_off_the_youtube_bars():
+    import base64
+    import json
+
+    import numpy as np
+    at = AppTest.from_file(str(APP), default_timeout=90).run()
+    pick = [s for s in at.selectbox if "Subscribers gained" in s.options]
+    if not pick:
+        pytest.skip("no YouTube data loaded")
+    pick[0].select_index(pick[0].options.index("Subscribers gained")).run()
+    assert not at.exception
+    bars = [json.loads(c.proto.spec)["data"][0] for c in at.get("plotly_chart")]
+    bars = [b for b in bars if b.get("orientation") == "h"]
+    assert bars
+    for b in bars:
+        x = b["x"]
+        if isinstance(x, dict):  # plotly sends numeric arrays as base64
+            x = np.frombuffer(base64.b64decode(x["bdata"]), dtype=np.dtype(x["dtype"]))
+        assert all(v != 0 for v in x)

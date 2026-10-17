@@ -2,6 +2,12 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.2.1 - 2026-10-17
+
+- YouTube: a series that gained no subscribers is left off the *Subscribers gained* charts.
+- Channel numbers corrected (Feb 2023 subscribers; Oct - Dec 2025 views from the exports).
+- YouTube monthly exports Oct - Dec 2025 loaded.
+
 ## 1.2.0 - 2026-10-17
 
 - YouTube: channel subscribers *and views* by month (Jan 2022 - Sep 2026), shown by Month, Year or Year over year.

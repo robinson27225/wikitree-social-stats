@@ -583,6 +583,8 @@ with tab_yt:
             st.caption(f"{label}: totals over this whole range. These overlap the monthly figures, so do not add them together.")
 
         series = wide.groupby("series").agg(videos=("video_id", "count"), **{metric: (metric, "sum")}).dropna().sort_values(metric)
+        if metric == "subscribers":
+            series = series[series[metric] != 0]  # a series that gained no subscribers is left off
         fig = go.Figure(go.Bar(
             x=series[metric], y=series.index, orientation="h", marker=dict(color=BLUE, cornerradius=4),
             text=[f"{v:,.0f}" for v in series[metric]], textposition="outside", cliponaxis=False,
@@ -599,6 +601,9 @@ with tab_yt:
 
         in_months = yt[yt.metric == metric].merge(months[["period_start", "period_end", "label"]], on=["period_start", "period_end"])
         order = months.label.tolist()
+        if metric == "subscribers":
+            gained = in_months.groupby("series")["value"].sum()
+            in_months = in_months[in_months.series.isin(gained[gained != 0].index)]
         if in_months.period_start.nunique() >= 2:
             st.subheader(f"{name(metric)}, by month")
             month_group_view(in_months[["period_start", "value", "series"]], name(metric), "yt_group", True)
