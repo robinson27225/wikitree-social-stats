@@ -26,7 +26,9 @@ class ImportError_(ValueError):
 # --- parsing helpers --------------------------------------------------------
 
 def normalize_header(h: str) -> str:
-    return re.sub(r"[^0-9a-z]+", "_", str(h).strip().lower()).strip("_")
+    """'Impressions (total) ' -> 'impressions'. Older sheets tagged some LinkedIn columns '(total)'."""
+    name = re.sub(r"[^0-9a-z]+", "_", str(h).strip().lower()).strip("_")
+    return re.sub(r"_total$", "", name)
 
 
 def parse_number(s) -> float | None:
@@ -127,6 +129,8 @@ def classify_series(title: str) -> str:
 # --- loaders ----------------------------------------------------------------
 
 def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, import_id: int) -> tuple[int, int, str]:
+    if platform == "tiktok" and "new_followers" in df.columns and "followers" not in df.columns:
+        df = df.rename(columns={"new_followers": "followers"})  # same daily figure under its 2023 name
     drop = config.DROP_METRICS.get(platform, set())
     metrics = [c for c in df.columns if c != "date" and c not in drop]
     zero_fill = config.BLANK_MEANS_ZERO.get(platform, set())
@@ -239,6 +243,92 @@ def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, p
     return len(rows), len(rows), "; ".join(notes)
 
 
+# --- workbooks ---------------------------------------------------------------
+
+def _cell_to_str(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def read_workbook(path: Path) -> list[tuple[str, pd.DataFrame]]:
+    """Every tab as (name, DataFrame of text cells) with normalised headers; columns without a header are dropped."""
+    import openpyxl  # only needed when loading Excel files
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    out = []
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            continue
+        keep, seen = [], set()
+        for i, cell in enumerate(rows[0]):
+            h = normalize_header(cell) if cell is not None else ""
+            if h and h not in seen:  # a repeated header keeps its first column
+                seen.add(h)
+                keep.append((i, h))
+        body = [[_cell_to_str(r[i]) if i < len(r) else "" for i, _ in keep] for r in rows[1:]]
+        out.append((ws.title, pd.DataFrame(body, columns=[h for _, h in keep], dtype=str)))
+    wb.close()
+    return out
+
+
+def import_workbook(conn: sqlite3.Connection, path: Path, *, raw_dir: Path, force: bool = False) -> dict:
+    """Load every recognised daily-channel tab of an Excel file. Each tab is logged as its own import."""
+    digest = sha256_file(path)
+    sheets = read_workbook(path)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    archived = raw_dir / f"{digest[:8]}_{path.name}"
+    if not archived.exists():
+        shutil.copy2(path, archived)
+
+    results = []
+    for title, df in sheets:
+        entry = {"sheet": title}
+        if any(re.search(pat, title, flags=re.IGNORECASE) for pat in config.SKIP_SHEET_PATTERNS):
+            results.append({**entry, "status": "skipped", "reason": "left out on purpose (Twitter)"})
+            continue
+        try:
+            kind, platform = detect_kind(set(df.columns))
+        except ImportError_:
+            results.append({**entry, "status": "skipped", "reason": "not a recognised channel sheet"})
+            continue
+        if kind != "daily":
+            results.append({**entry, "status": "skipped", "reason": f"a {kind} file, not a daily channel sheet"})
+            continue
+        sheet_sha = f"{digest}:{title}"  # one log row per tab, so the checksum includes the tab name
+        seen = conn.execute("SELECT id FROM import_log WHERE sha256 = ?", (sheet_sha,)).fetchone()
+        if seen and not force:
+            results.append({**entry, "status": "skipped", "reason": "already imported"})
+            continue
+        stamp = datetime.now().isoformat(timespec="seconds")
+        if seen:
+            import_id = seen[0]
+            conn.execute("UPDATE import_log SET imported_at = ? WHERE id = ?", (stamp, import_id))
+        else:
+            import_id = conn.execute(
+                """INSERT INTO import_log (kind, platform, source_name, sha256, archived_path, imported_at)
+                   VALUES ('daily',?,?,?,?,?)""",
+                (platform, f"{path.name} \u203a {title}", sheet_sha, _portable(archived), stamp),
+            ).lastrowid
+        read, loaded, _ = import_daily(conn, df, platform, import_id)
+        conn.execute("UPDATE import_log SET rows_read = ?, rows_loaded = ? WHERE id = ?", (read, loaded, import_id))
+        results.append({**entry, "status": "imported", "platform": platform, "rows_read": read, "rows_loaded": loaded})
+
+    quality.derive_tiktok_follower_change(conn)
+    quality.rebuild_flags(conn)
+    conn.commit()
+    return {"status": "imported" if any(r["status"] == "imported" for r in results) else "skipped",
+            "file": path.name, "kind": "workbook", "sheets": results,
+            "reason": "no new sheets" if not any(r["status"] == "imported" for r in results) else None}
+
+
 # --- orchestration ----------------------------------------------------------
 
 def _portable(path: Path) -> str:
@@ -274,8 +364,16 @@ def import_file(
     if seen and not force:
         return {"status": "skipped", "file": path.name, "reason": f"already imported as {seen[1]!r}"}
 
+    if path.suffix.lower() in (".xlsx", ".xlsm"):
+        return import_workbook(conn, path, raw_dir=raw_dir, force=force)
+
     df = read_csv(path)
-    kind, detected = detect_kind(set(df.columns))
+    try:
+        kind, detected = detect_kind(set(df.columns))
+    except ImportError_:
+        if not platform:
+            raise
+        kind, detected = "daily", platform  # the caller named the channel
     platform = platform or detected
 
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -358,7 +456,8 @@ def remove_import(conn: sqlite3.Connection, import_id: int) -> dict[str, int]:
     quality.derive_tiktok_follower_change(conn)
     quality.rebuild_flags(conn)
     conn.commit()
-    archived = Path(row[0])
-    archived = archived if archived.is_absolute() else config.ROOT / archived
-    archived.unlink(missing_ok=True)
+    if not conn.execute("SELECT 1 FROM import_log WHERE archived_path = ?", (row[0],)).fetchone():
+        archived = Path(row[0])
+        archived = archived if archived.is_absolute() else config.ROOT / archived
+        archived.unlink(missing_ok=True)  # a workbook's tabs share one archived file; keep it until the last goes
     return counts

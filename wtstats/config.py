@@ -47,11 +47,14 @@ COLORS = {
 DAILY_SIGNATURES = {
     "facebook": {"page_visits", "new_likes"},
     "instagram": {"profile_visits", "new_followers"},
-    "tiktok": {"video_views", "new_viewers"},
+    "tiktok": {"video_views", "profile_views"},
     "linkedin": {"impressions", "overview_page_views"},
 }
 SCHEDULER_SIGNATURE = {"date", "channel", "platform", "posts"}
 YOUTUBE_SIGNATURE = {"content", "video_title", "views"}
+
+# Workbook tabs whose names match are left out on purpose (Twitter is not tracked).
+SKIP_SHEET_PATTERNS = [r"\btw\b", r"twitter"]
 
 # --- Per-platform rules -----------------------------------------------------
 # Columns that are derivable from other columns; not stored.

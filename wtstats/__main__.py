@@ -21,7 +21,14 @@ def cmd_import(args) -> int:
             print(f"FAILED   {Path(f).name}: {e}")
             failed += 1
             continue
-        if r["status"] == "skipped":
+        if r.get("kind") == "workbook":
+            print(f"workbook {r['file']}")
+            for sh in r["sheets"]:
+                if sh["status"] == "imported":
+                    print(f"  imported {sh['sheet']}: {sh['platform']}  {sh['rows_loaded']} of {sh['rows_read']} rows")
+                else:
+                    print(f"  skipped  {sh['sheet']}: {sh['reason']}")
+        elif r["status"] == "skipped":
             print(f"skipped  {r['file']}: {r['reason']}")
         else:
             print(f"imported {r['file']}: {r['kind']}/{r['platform'] or 'multi'}  "
