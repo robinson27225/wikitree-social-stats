@@ -2,6 +2,17 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.1.0 - 2026-10-17
+
+- Year over year: each year has its own colour (2021 red, 2022 blue, 2023 green, 2024 orange, 2025 gold, 2026 violet);
+  the latest year is the thickest line.
+- YouTube channel subscribers by month (from the channel's own Date + Subscribers export), grouped by Month, Year or
+  Year over year.
+- YouTube series: Link Builders and Tech Talk, Ask Aleš and Member Q&A are separate; new series Azure & Eowyn and
+  Spotlight Profile Shorts ("Are you related..."); Connection Combat is filed with ConnectionCheckers; ConnectionFinder is its
+  own series. A Playlist column in the export, or `data/youtube_series.csv`, sets a video's series; `reclassify` refiles videos.
+- Fix: the hosted app no longer breaks after a redeploy ("cannot import name ...").
+
 ## 1.0.0 - 2026-10-17
 
 First release for WikiTree members.

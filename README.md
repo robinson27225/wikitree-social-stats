@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.0.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.1.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -75,10 +75,20 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
 ## Reading the dashboard
 
 - **Over time** or **Year over year** (Overview and Channels): year over year lays every year with data over Jan-Dec, one
-  line per year (the latest is darkest). It uses whole months or weeks only, ignores the date range, and each card compares
+  line per year (each year has its own colour; the latest is the thickest). It uses whole months or weeks only, ignores the date range, and each card compares
   the year so far with the same dates a year earlier. Running totals (TikTok follower total) are left out.
-- **YouTube:** group the monthly files by **Month**, **Year** or **Year over year**.
+- **YouTube:** group the monthly files by **Month**, **Year** or **Year over year**. *Channel subscribers* shows the whole
+  channel's net subscribers per month.
 - A dotted line marks where a measure changes (`CHART_BREAKS`).
+
+## YouTube series and subscribers
+
+- **Series.** A video's series is, in order: the owner's choice in `data/youtube_series.csv` (columns `video_id,series`), else
+  its playlist (a `Playlist` column in the export, if you add one), else the title rules in `wtstats/config.py`
+  (`SERIES_RULES`; the first match wins). After changing any of these, run `python -m wtstats reclassify`.
+- **Channel subscribers.** Export the channel's *Subscribers* by month from YouTube Studio (columns `Date`, `Subscribers`) and run
+  `python -m wtstats import --monthly "Chart data.csv"`. `--monthly` treats every row as a whole month, whatever its date looks like.
+  This is the whole channel, so it is higher than the per-video *Subscribers gained*, which only counts the (up to 500) videos listed.
 
 ## Hosting (Streamlit Community Cloud)
 

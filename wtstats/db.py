@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
     title          TEXT NOT NULL,
     published_date TEXT,
     duration_s     INTEGER,
-    series         TEXT NOT NULL
+    series         TEXT NOT NULL,
+    playlist       TEXT                     -- from a Playlist column in the export, if there was one
 );
 
 -- Per-video numbers for a period: one calendar month (the monthly exports) or a
@@ -86,4 +87,6 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    if "playlist" not in {r[1] for r in conn.execute("PRAGMA table_info(youtube_videos)")}:  # databases made before playlists
+        conn.execute("ALTER TABLE youtube_videos ADD COLUMN playlist TEXT")
     return conn

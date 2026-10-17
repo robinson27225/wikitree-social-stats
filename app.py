@@ -86,6 +86,20 @@ def load_youtube(version: float) -> pd.DataFrame:
     return df
 
 
+@st.cache_data
+def load_channel(version: float) -> pd.DataFrame:
+    """The YouTube channel's own subscribers per month (net gained), from a Date + Subscribers export."""
+    df = _query("SELECT granularity, period_start, value FROM daily_metrics WHERE platform = 'youtube' AND metric = 'subscribers'")
+    if df.empty:
+        return pd.DataFrame(columns=["period_start", "value"])
+    df["period_start"] = pd.to_datetime(df["period_start"])
+    month = df[df.granularity == "month"].set_index("period_start")["value"]
+    day = df[df.granularity == "day"]
+    from_days = day.groupby(day["period_start"].dt.to_period("M").dt.start_time)["value"].sum()
+    m = pd.concat([month, from_days[~from_days.index.isin(month.index)]]).sort_index()
+    return pd.DataFrame({"period_start": m.index.strftime("%Y-%m-%d"), "value": m.values})
+
+
 # --- series building --------------------------------------------------------
 
 def family_series(daily: pd.DataFrame, family: str, rollup: str) -> pd.DataFrame:
@@ -180,15 +194,13 @@ def pct_change(cur: float, prev: float):
     return None if not prev else f"{(cur - prev) / prev:+.0%}"
 
 
-# Sequential blue, oldest year lightest to newest darkest (steps 250-700 of the palette's blue ramp).
-YEAR_RAMP = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
+# One colour per calendar year, so a year keeps its colour in every chart: 2021 red, 2022 blue, 2023 green, 2024 orange,
+# 2025 gold, 2026 violet, then pink and teal. The latest year is drawn thickest.
+YEAR_PALETTE = ["#e34948", "#2a78d6", "#008300", "#eb6834", "#eda100", "#6250d6", "#e87ba4", "#1baf7a"]
 
 
 def year_colors(years: list[int]) -> dict[int, str]:
-    """One colour per year, the same in every panel; the latest year is the darkest."""
-    if len(years) == 1:
-        return {years[0]: YEAR_RAMP[-3]}
-    return {y: YEAR_RAMP[round(i * (len(YEAR_RAMP) - 1) / (len(years) - 1))] for i, y in enumerate(years)}
+    return {y: YEAR_PALETTE[(y - 2021) % len(YEAR_PALETTE)] for y in years}
 
 
 def position_label(pos: int, roll: str) -> str:
@@ -237,6 +249,58 @@ def yoy_tables_view(panels: list[tuple[str, pd.DataFrame]], roll: str) -> pd.Dat
     out = pd.concat({t: tb.rename(index=lambda p: position_label(p, roll)) for t, tb in panels}, names=["", ""])
     out.columns = [str(int(c)) for c in out.columns]
     return out
+
+
+def month_group_view(frame: pd.DataFrame, what: str, key: str, with_series: bool) -> None:
+    """Monthly totals as Month, Year or Year over year. `frame` has period_start (the 1st of a month), value, and series if
+    with_series. Draws the chart and a table view."""
+    when = pd.to_datetime(frame["period_start"])
+    frame = frame.assign(year=when.dt.year, month_no=when.dt.month, month_label=when.dt.strftime("%B %Y"), when=when)
+    grain = st.radio("Group the months by", ["Month", "Year", "Year over year"], horizontal=True, key=key)
+
+    def bars(x, y, hover):
+        fig = go.Figure(go.Bar(
+            x=x, y=y, marker=dict(color=BLUE, cornerradius=4), text=[f"{v:,.0f}" for v in y], textposition="outside",
+            cliponaxis=False, textfont=dict(color=INK_2, size=12), customdata=hover,
+            hovertemplate="%{x}<br>%{y:,.0f}<br>%{customdata}<extra></extra>"))
+        fig.update_layout(
+            height=300, margin=dict(l=8, r=8, t=24, b=8), bargap=0.45,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+            yaxis=dict(gridcolor=GRID, zeroline=False, tickfont=dict(color=INK_3), separatethousands=True),
+            xaxis=dict(tickfont=dict(color=INK), type="category"),
+            hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
+        return fig
+
+    def table(index_col, columns_col):
+        if with_series:
+            return frame.pivot_table(index="series", columns=columns_col, values="value", aggfunc="sum")
+        return frame.assign(_row=what).pivot_table(index="_row", columns=columns_col, values="value", aggfunc="sum")
+
+    if grain == "Month":
+        by_month = frame.groupby(["when", "month_label"])["value"].sum().reset_index().sort_values("when")
+        show(bars(by_month["month_label"], by_month["value"].values, [""] * len(by_month)))
+        tbl = table("series", "when")
+        tbl.columns = [c.strftime("%b %Y") for c in tbl.columns]
+        title = "Series by month (table view)" if with_series else "By month (table view)"
+    elif grain == "Year":
+        by_year = frame.groupby("year").agg(value=("value", "sum"), months=("when", "nunique"))
+        show(bars([str(y) for y in by_year.index], by_year["value"].values,
+                  [f"{n} of 12 months loaded" if n < 12 else "all 12 months" for n in by_year["months"]]))
+        tbl = table("series", "year")
+        tbl.columns = [str(c) for c in tbl.columns]
+        title = "Series by year (table view)" if with_series else "By year (table view)"
+    else:
+        by_pos = frame.pivot_table(index="month_no", columns="year", values="value", aggfunc="sum")
+        show(yoy_figure([(what, by_pos)], "Month", ncols=1, panel_height=340))
+        tbl = by_pos.rename(index=lambda p: position_label(p, "Month"))
+        tbl.columns = [str(int(c)) for c in tbl.columns]
+        title = "Month by year (table view)"
+    with st.expander(title):
+        st.dataframe(tbl.style.format("{:,.0f}", na_rep="–"), width="stretch")
+    partial = frame.groupby("year")["when"].nunique()
+    if grain != "Month" and (partial < 12).any():
+        st.caption("Years with fewer than 12 months loaded: " + ", ".join(f"{y} ({n})" for y, n in partial.items() if n < 12) + ".")
 
 
 # --- app --------------------------------------------------------------------
@@ -298,7 +362,7 @@ with tab_over:
         panels = [(t, tb) for t, tb in panels if not tb.empty]
         if panels:
             st.subheader(f"{label}, year over year")
-            st.caption("One line per year; the latest year is the darkest. Each panel has its own scale.")
+            st.caption("One line per year; the latest year is the thickest. Each panel has its own scale.")
             for (fam, pl), breaks in config.CHART_BREAKS.items():
                 if fam == fam_key and pl in series:
                     for when, note in breaks:
@@ -362,7 +426,7 @@ with tab_chan:
         panels = [(m.replace("_", " ").capitalize(), yoy_table(daily_series(daily, platform, [m]), roll))
                   for m in chosen if m not in config.NON_ADDITIVE_METRICS]
         panels = [(t, tb) for t, tb in panels if not tb.empty]
-        st.caption(f"Every year with data, one line per year (latest darkest), whole {roll.lower()}s only. The date range does not apply here."
+        st.caption(f"Every year with data, one line per year (latest thickest), whole {roll.lower()}s only. The date range does not apply here."
                    + (" Running totals are left out." if skipped else ""))
         if panels:
             show(yoy_figure(panels, roll))
@@ -525,50 +589,18 @@ with tab_yt:
         in_months = yt[yt.metric == metric].merge(months[["period_start", "period_end", "label"]], on=["period_start", "period_end"])
         order = months.label.tolist()
         if in_months.period_start.nunique() >= 2:
-            when = pd.to_datetime(in_months.period_start)
-            in_months = in_months.assign(year=when.dt.year, month_no=when.dt.month)
-            grain = st.radio("Group the months by", ["Month", "Year", "Year over year"], horizontal=True, key="yt_group")
-            st.subheader(f"{name(metric)}, {'month by month' if grain == 'Month' else 'by year' if grain == 'Year' else 'year over year'}")
+            st.subheader(f"{name(metric)}, by month")
+            month_group_view(in_months[["period_start", "value", "series"]], name(metric), "yt_group", True)
+            st.caption("Each month counts the videos listed in that month's export (up to 500).")
 
-            def bars(x, y, hover, height=300):
-                fig = go.Figure(go.Bar(
-                    x=x, y=y, marker=dict(color=BLUE, cornerradius=4), text=[f"{v:,.0f}" for v in y], textposition="outside",
-                    cliponaxis=False, textfont=dict(color=INK_2, size=12), customdata=hover,
-                    hovertemplate="%{x}<br>%{y:,.0f}<br>%{customdata}<extra></extra>"))
-                fig.update_layout(
-                    height=height, margin=dict(l=8, r=8, t=24, b=8), bargap=0.45,
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
-                    yaxis=dict(gridcolor=GRID, zeroline=False, rangemode="tozero", tickfont=dict(color=INK_3), separatethousands=True),
-                    xaxis=dict(tickfont=dict(color=INK), type="category"),
-                    hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
-                return fig
-
-            if grain == "Month":
-                by_month = in_months.groupby("label")["value"].sum().reindex([m for m in order if m in set(in_months.label)])
-                show(bars(by_month.index, by_month.values, [""] * len(by_month)))
-                tbl = in_months.pivot_table(index="series", columns="label", values="value", aggfunc="sum")
-                tbl = tbl[[m for m in order if m in tbl.columns]]
-                table_title = "Series by month (table view)"
-            elif grain == "Year":
-                by_year = in_months.groupby("year").agg(value=("value", "sum"), months=("period_start", "nunique"))
-                show(bars([str(y) for y in by_year.index], by_year["value"].values,
-                          [f"{n} of 12 months loaded" if n < 12 else "all 12 months" for n in by_year["months"]]))
-                tbl = in_months.pivot_table(index="series", columns="year", values="value", aggfunc="sum")
-                tbl.columns = [str(c) for c in tbl.columns]
-                table_title = "Series by year (table view)"
-            else:
-                by_pos = in_months.pivot_table(index="month_no", columns="year", values="value", aggfunc="sum")
-                show(yoy_figure([(name(metric), by_pos)], "Month", ncols=1, panel_height=340))
-                tbl = by_pos.rename(index=lambda p: position_label(p, "Month"))
-                tbl.columns = [str(int(c)) for c in tbl.columns]
-                table_title = "Month by year (table view)"
-            with st.expander(table_title):
-                st.dataframe(tbl.style.format("{:,.0f}", na_rep="–"), width="stretch")
-            partial = in_months.groupby("year")["period_start"].nunique()
-            st.caption("Each month counts the videos listed in that month's export (up to 500)."
-                       + (" Years with fewer than 12 months loaded: " + ", ".join(f"{y} ({n})" for y, n in partial.items() if n < 12) + "."
-                          if grain != "Month" and (partial < 12).any() else ""))
+        st.subheader("Channel subscribers")
+        chan = load_channel(ver)
+        if chan.empty:
+            st.info("No channel-level subscriber numbers loaded yet. Import the channel's Date + Subscribers export from YouTube "
+                    "Studio (`python -m wtstats import --monthly file.csv`). The per-video Subscribers above only count the videos listed.")
+        else:
+            st.caption("Net subscribers gained per month, for the whole channel.")
+            month_group_view(chan, "Subscribers", "yt_subs_group", False)
 
         st.subheader("Videos")
         f1, f2 = st.columns([2, 3])

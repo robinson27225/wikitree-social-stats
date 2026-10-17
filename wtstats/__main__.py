@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, config, db
-from .importers import ImportError_, find_imports, import_file, import_row_counts, remove_import
+from .importers import ImportError_, find_imports, import_file, import_row_counts, reclassify_videos, remove_import
 
 
 def cmd_import(args) -> int:
@@ -15,7 +15,7 @@ def cmd_import(args) -> int:
     for f in args.files:
         try:
             r = import_file(conn, f, raw_dir=args.raw_dir, platform=args.platform,
-                            period=args.period, metric=args.metric, since=args.since, until=args.until, force=args.force)
+                            period=args.period, metric=args.metric, since=args.since, until=args.until, monthly=args.monthly, force=args.force)
         except (ImportError_, OSError) as e:
             conn.rollback()
             print(f"FAILED   {Path(f).name}: {e}")
@@ -55,6 +55,13 @@ def cmd_remove(args) -> int:
         return 0
     done = remove_import(conn, import_id)
     print("removed  " + name + ": " + ", ".join(f"{n} {t}" for t, n in done.items() if n))
+    return 0
+
+
+def cmd_reclassify(args) -> int:
+    conn = db.connect(args.db)
+    n = reclassify_videos(conn)
+    print(f"reclassified {n} video(s) under the current series rules, playlists and {config.SERIES_OVERRIDES_FILE.name}")
     return 0
 
 
@@ -99,6 +106,7 @@ def main(argv=None) -> int:
     pi.add_argument("--metric", help="Meta single-metric exports: which metric the file holds (default: read from its title)")
     pi.add_argument("--from", dest="since", help="only load days on or after this date (YYYY-MM-DD), e.g. when a metric started")
     pi.add_argument("--until", help="only load days on or before this date (YYYY-MM-DD)")
+    pi.add_argument("--monthly", action="store_true", help="treat each row as a whole month (e.g. a subscribers-by-month file dated the 1st)")
     pi.add_argument("--raw-dir", default=config.RAW_DIR, help="where untouched copies of the files are kept")
     pi.add_argument("--force", action="store_true", help="re-import a file that was already imported")
     pi.set_defaults(func=cmd_import)
@@ -107,6 +115,9 @@ def main(argv=None) -> int:
     pr.add_argument("file", help="part of the file name (or checksum) shown by `status` / the Imports table")
     pr.add_argument("--yes", action="store_true", help="really remove it (without this it only shows what would go)")
     pr.set_defaults(func=cmd_remove)
+
+    pc = sub.add_parser("reclassify", help="refile the YouTube videos already loaded after changing a series rule or playlist")
+    pc.set_defaults(func=cmd_reclassify)
 
     ps = sub.add_parser("status", help="show what is loaded")
     ps.set_defaults(func=cmd_status)

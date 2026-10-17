@@ -51,6 +51,8 @@ _PERIOD_FORMATS = [
     ("%Y-%m", "month"),
     ("%b %Y", "month"),
     ("%B %Y", "month"),
+    ("%b %d, %Y", "day"),
+    ("%B %d, %Y", "day"),
     ("%m/%Y", "month"),
 ]
 
@@ -151,17 +153,52 @@ def infer_period_from_name(name: str) -> tuple[str, str] | None:
     return None
 
 
-def classify_series(title: str) -> str:
+def title_series(title: str) -> str:
     for name, pattern in config.SERIES_RULES:
         if re.search(pattern, title, flags=re.IGNORECASE):
             return name
     return config.OTHER_SERIES
 
 
+def load_series_overrides(path: Path | None = None) -> dict[str, str]:
+    """video_id -> series from data/youtube_series.csv (columns video_id, series); empty if there is no such file."""
+    path = Path(path or config.SERIES_OVERRIDES_FILE)
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    df.columns = [normalize_header(c) for c in df.columns]
+    if not {"video_id", "series"} <= set(df.columns):
+        raise ImportError_(f"{path.name} needs the columns video_id and series, found {list(df.columns)}")
+    return {r["video_id"].strip(): r["series"].strip() for r in df.to_dict("records") if r["video_id"].strip() and r["series"].strip()}
+
+
+def classify_series(title: str, playlist: str | None = None, video_id: str | None = None,
+                    overrides: dict[str, str] | None = None) -> str:
+    """The series for a video: the owner's manual choice, else its playlist, else the title rules."""
+    if overrides and video_id and overrides.get(video_id):
+        return overrides[video_id]
+    if playlist and playlist.strip():
+        return playlist.strip()
+    return title_series(title)
+
+
+def reclassify_videos(conn: sqlite3.Connection) -> int:
+    """Refile every loaded video under the current rules, overrides and playlists. Returns how many changed."""
+    overrides = load_series_overrides()
+    changed = 0
+    for vid, title, playlist, series in conn.execute("SELECT video_id, title, playlist, series FROM youtube_videos").fetchall():
+        new = classify_series(title, playlist, vid, overrides)
+        if new != series:
+            conn.execute("UPDATE youtube_videos SET series = ? WHERE video_id = ?", (new, vid))
+            changed += 1
+    conn.commit()
+    return changed
+
+
 # --- loaders ----------------------------------------------------------------
 
 def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, import_id: int,
-                 since: str | None = None, until: str | None = None) -> tuple[int, int, str]:
+                 since: str | None = None, until: str | None = None, monthly: bool = False) -> tuple[int, int, str]:
     rename = {old: new for old, new in config.RENAME_METRICS.get(platform, {}).items() if old in df.columns and new not in df.columns}
     if rename:
         df = df.rename(columns=rename)  # the same figure under an older or different export's name
@@ -177,6 +214,8 @@ def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, impo
             gran, start = parse_period(rec["date"])
         except ImportError_ as e:
             raise ImportError_(f"row {n}: {e}") from None
+        if monthly:  # each row is a whole month, however its date is written
+            gran, start = "month", start[:7] + "-01"
         if (since and start < since) or (until and start > until):
             continue  # outside the days the caller asked for
         values = {m: parse_number(rec[m]) for m in metrics}
@@ -239,7 +278,7 @@ _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 _FOOTER = re.compile(r"showing top (\d+) results", re.IGNORECASE)
 
 
-_YOUTUBE_META = {"content", "video_title", "video_publish_time", "duration"}
+_YOUTUBE_META = {"content", "video_title", "video_publish_time", "duration", *config.PLAYLIST_COLUMNS}
 
 
 def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, period: tuple[str, str]) -> tuple[int, int, str]:
@@ -251,6 +290,8 @@ def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, p
     if footer and int(footer.group(1)) <= len(rows):
         notes.append(f"export is capped at the top {footer.group(1)} videos; videos beyond that are missing")
     metrics = [c for c in df.columns if c not in _YOUTUBE_META]
+    playlist_col = next((c for c in config.PLAYLIST_COLUMNS if c in df.columns), None)
+    overrides = load_series_overrides()
     videos, stats = [], []
     for rec in rows.to_dict("records"):
         vid = rec["content"].strip()
@@ -260,15 +301,18 @@ def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, p
         except ValueError:
             published = None
         duration = parse_number(rec.get("duration"))
-        videos.append((vid, title, published, int(duration) if duration is not None else None, classify_series(title)))
+        playlist = " ".join(str(rec[playlist_col]).split()) if playlist_col else ""
+        videos.append((vid, title, published, int(duration) if duration is not None else None,
+                       classify_series(title, playlist, vid, overrides), playlist or None))
         for m in metrics:
             v = parse_number(rec[m])
             if v is not None:
                 stats.append((vid, period[0], period[1], m, v, import_id))
     conn.executemany(
-        """INSERT INTO youtube_videos (video_id, title, published_date, duration_s, series) VALUES (?,?,?,?,?)
+        """INSERT INTO youtube_videos (video_id, title, published_date, duration_s, series, playlist) VALUES (?,?,?,?,?,?)
            ON CONFLICT (video_id) DO UPDATE SET title = excluded.title, published_date = excluded.published_date,
-               duration_s = excluded.duration_s, series = excluded.series""",
+               duration_s = excluded.duration_s, series = excluded.series,
+               playlist = COALESCE(excluded.playlist, youtube_videos.playlist)""",
         videos,
     )
     conn.executemany(
@@ -429,6 +473,7 @@ def import_file(
     metric: str | None = None,
     since: str | None = None,
     until: str | None = None,
+    monthly: bool = False,
     force: bool = False,
 ) -> dict:
     """Archive and load one export file. Returns a summary dict (status 'imported' or 'skipped').
@@ -498,7 +543,7 @@ def import_file(
 
     notes = []
     if kind == "daily":
-        read, loaded, note = import_daily(conn, df, platform, import_id, since, until)
+        read, loaded, note = import_daily(conn, df, platform, import_id, since, until, monthly)
     elif kind == "scheduler":
         read, loaded, note = import_scheduler(conn, df, import_id)
     else:

@@ -52,6 +52,7 @@ DAILY_SIGNATURES = {
     "instagram": {"profile_visits", "new_followers"},
     "tiktok": {"video_views", "profile_views"},
     "linkedin": {"impressions", "overview_page_views"},
+    "youtube": {"date", "subscribers"},  # the channel's own Date + Subscribers export (the per-video table is told apart first)
 }
 # LinkedIn's own follower export (the "New followers" tab) has different columns from the manual sheets.
 EXTRA_DAILY_SIGNATURES = [({"organic_followers", "total_followers"}, "linkedin")]
@@ -126,18 +127,29 @@ CHART_BREAKS = {
 }
 
 # --- YouTube series (parsed from titles) -----------------------------------
-# First match wins, so more specific series come first.
+# Which series a video belongs to, in order of precedence:
+#   1. data/youtube_series.csv (video_id,series): the owner's manual choice for a video
+#   2. a Playlist column in the YouTube export, when the video has one
+#   3. these title rules; the first match wins, so more specific series come first
+# After changing a rule, run `python -m wtstats reclassify` to refile the videos already loaded.
+SERIES_OVERRIDES_FILE = DATA_DIR / "youtube_series.csv"
+PLAYLIST_COLUMNS = ("playlist", "playlists", "playlist_title", "playlist_titles")
 SERIES_RULES = [
     ("SourceAThon", r"source-?a-?thon"),
     ("ConnectAThon", r"connect-?a-?thon"),
     ("Saturday Roundup", r"saturday\s*round-?up"),
     ("WikiTree Challenge", r"wikitree challenge|#wtchallenge"),
-    ("ConnectionCheckers / Finder", r"connection\s*(checkers?|finder)|#fridayspotlight|are you related or connected"),
+    ("Spotlight Profile Shorts", r"are you related|#fridayspotlight"),
+    ("ConnectionCheckers", r"connection\s*(checkers?|combat)"),
+    ("ConnectionFinder", r"connection\s*finder"),
     ("Question of the Week", r"question\s*of\s*the\s*week"),
-    ("Q&A and Ask Aleš", r"member q\s*&\s*a|ask ale"),
-    ("WikiTree Day", r"wikitree day"),
+    ("Ask Ale\u0161", r"ask ale"),
+    ("Member Q&A", r"member q\s*&\s*a"),
+    ("WikiTree Day", r"wikitree\s*day"),
     ("Data Doctors", r"data doctors"),
-    ("Link Builders / Tech Talk", r"link builders|tech talk"),
+    ("Link Builders", r"link builders"),
+    ("Tech Talk", r"tech talk"),
+    ("Azure & Eowyn", r"azure\s*&\s*eowyn"),
     ("How-To", r"\bhow-?to\b|tutorial"),
 ]
 OTHER_SERIES = "Other"
