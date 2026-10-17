@@ -93,7 +93,7 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
 - **Channel subscribers and views.** The whole channel's net subscribers and views per month. Export them from YouTube Studio (or keep
   a sheet) as `Date,Subscribers,Views` and run `python -m wtstats import --monthly "Chart data.csv"`. `--monthly` treats every row as a
   whole month, whatever its date looks like. A month's figures equal the *Total* row of that month's per-video export, and are higher than
-  the sum of the per-video numbers, which only count the (up to 500) videos listed.
+  the sum of the per-video numbers, which only count the (up to 500) videos listed. Jan 2022 - Sep 2025 came from the owner's sheet; Oct - Dec 2025 views are the exports' Total rows (the sheet's were 10-18 higher).
 - **Community posts.** The export mixes videos with community-page posts. It has no column for that, so any item with a duration of exactly
   16 seconds (`COMMUNITY_POST_DURATION_S`) is shown as a community post; the YouTube tab can show videos, posts or both.
 
