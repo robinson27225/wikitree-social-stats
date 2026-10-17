@@ -22,8 +22,6 @@ SURFACE = "#fcfcfb"
 BLUE = config.COLORS["facebook"]
 
 st.set_page_config(page_title="WikiTree Social Stats", page_icon=str(config.LOGO) if config.LOGO.exists() else "📊", layout="wide")
-if config.LOGO.exists():
-    st.logo(str(config.LOGO), size="large")
 st.markdown(
     """<style>
     .block-container {padding-top: 2rem; max-width: 1280px;}
