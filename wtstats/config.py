@@ -58,6 +58,10 @@ YOUTUBE_SIGNATURE = {"content", "video_title", "views"}
 # Workbook tabs whose names match are left out on purpose (Twitter is not tracked).
 SKIP_SHEET_PATTERNS = [r"\btw\b", r"twitter"]
 
+# Meta's Insights exports are single-metric files (UTF-16, a "sep=," line, then the metric's title) that don't say which
+# channel they are from, so the channel is passed in. The title says which metric it is:
+META_EXPORT_METRICS = {"content interactions": "interactions", "reach": "reach"}
+
 # --- Per-platform rules -----------------------------------------------------
 # Columns that are derivable from other columns; not stored.
 DROP_METRICS = {"linkedin": {"engagement_rate", "sponsored_followers", "organic_followers", "auto_invited_followers"}}
@@ -112,7 +116,11 @@ BELOW_CHECKS = [
 ]
 
 # (family, platform) -> [(date, label)]: a dotted line on that chart where the measure changes.
-CHART_BREAKS = {("audience", "facebook"): [("2025-09-01", "Reach \u2192 Viewers")]}
+CHART_BREAKS = {
+    ("audience", "facebook"): [("2025-09-01", "Reach \u2192 Viewers")],
+    # Instagram's "Interactions" is Meta's newer "Content interactions" from this day (zero before it in that export).
+    ("engagement", "instagram"): [("2025-08-22", "Content interactions")],
+}
 
 # --- YouTube series (parsed from titles) -----------------------------------
 # First match wins, so more specific series come first.
@@ -130,6 +138,9 @@ SERIES_RULES = [
     ("How-To", r"\bhow-?to\b|tutorial"),
 ]
 OTHER_SERIES = "Other"
+
+# Running totals: weeks and months take the last value, not the sum, and year-over-year leaves them out.
+NON_ADDITIVE_METRICS = {"followers_total"}
 
 # --- Dashboard metric families ----------------------------------------------
 # family -> (label, {platform: [daily metrics summed]}, caveat)

@@ -15,7 +15,7 @@ def cmd_import(args) -> int:
     for f in args.files:
         try:
             r = import_file(conn, f, raw_dir=args.raw_dir, platform=args.platform,
-                            period=args.period, force=args.force)
+                            period=args.period, metric=args.metric, since=args.since, until=args.until, force=args.force)
         except (ImportError_, OSError) as e:
             conn.rollback()
             print(f"FAILED   {Path(f).name}: {e}")
@@ -95,6 +95,9 @@ def main(argv=None) -> int:
     pi.add_argument("--platform", choices=sorted(config.DAILY_SIGNATURES), help="override auto-detection (daily files only)")
     pi.add_argument("--period", help="YouTube only: the period the file covers, as YYYY-MM or YYYY-MM-DD:YYYY-MM-DD "
                                      "(default: the month named in the file name, e.g. ..._July_2026.csv)")
+    pi.add_argument("--metric", help="Meta single-metric exports: which metric the file holds (default: read from its title)")
+    pi.add_argument("--from", dest="since", help="only load days on or after this date (YYYY-MM-DD), e.g. when a metric started")
+    pi.add_argument("--until", help="only load days on or before this date (YYYY-MM-DD)")
     pi.add_argument("--raw-dir", default=config.RAW_DIR, help="where untouched copies of the files are kept")
     pi.add_argument("--force", action="store_true", help="re-import a file that was already imported")
     pi.set_defaults(func=cmd_import)

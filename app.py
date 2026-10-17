@@ -1,6 +1,7 @@
 """WikiTree Social Stats dashboard.   Run:  streamlit run app.py"""
 from __future__ import annotations
 
+import calendar
 import math
 import sqlite3
 from datetime import timedelta
@@ -11,7 +12,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from wtstats import config, quality
-from wtstats.series import daily_series
+from wtstats.series import daily_series, yoy_table, ytd_vs_prior
 
 INK = "#0b0b0b"
 INK_2 = "#52514e"
@@ -105,10 +106,11 @@ def family_series(daily: pd.DataFrame, family: str, rollup: str) -> pd.DataFrame
 def metric_series(daily: pd.DataFrame, platform: str, metric: str, rollup: str) -> pd.Series:
     sub = daily[(daily.platform == platform) & (daily.metric == metric) & (daily.granularity == "day")]
     d = sub.set_index("period_start")["value"].sort_index()
+    how = "last" if metric in config.NON_ADDITIVE_METRICS else "sum"   # a running total is not summed
     if rollup == "Week":
-        d = d.groupby(d.index.to_period("W-SUN").start_time).sum()
+        d = d.groupby(d.index.to_period("W-SUN").start_time).agg(how)
     elif rollup == "Month":
-        d = d.groupby(d.index.to_period("M").start_time).sum()
+        d = d.groupby(d.index.to_period("M").start_time).agg(how)
     return d
 
 
@@ -172,6 +174,65 @@ def pct_change(cur: float, prev: float):
     return None if not prev else f"{(cur - prev) / prev:+.0%}"
 
 
+# Sequential blue, oldest year lightest to newest darkest (steps 250-700 of the palette's blue ramp).
+YEAR_RAMP = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
+
+
+def year_colors(years: list[int]) -> dict[int, str]:
+    """One colour per year, the same in every panel; the latest year is the darkest."""
+    if len(years) == 1:
+        return {years[0]: YEAR_RAMP[-3]}
+    return {y: YEAR_RAMP[round(i * (len(YEAR_RAMP) - 1) / (len(years) - 1))] for i, y in enumerate(years)}
+
+
+def position_label(pos: int, roll: str) -> str:
+    return calendar.month_abbr[int(pos)] if roll == "Month" else f"Week {int(pos)}"
+
+
+def yoy_figure(panels: list[tuple[str, pd.DataFrame]], roll: str = "Month", ncols: int = 2, panel_height: int = 250) -> go.Figure:
+    """Year over year: one panel per series, one line per year laid over Jan-Dec. Each panel has its own scale."""
+    years = sorted({int(y) for _, t in panels for y in t.columns})
+    colors = year_colors(years)
+    nrows = math.ceil(len(panels) / ncols)
+    fig = make_subplots(rows=nrows, cols=ncols, subplot_titles=[t for t, _ in panels],
+                        vertical_spacing=0.3 / nrows if nrows > 1 else 0.1, horizontal_spacing=0.07)
+    fig.update_annotations(font=dict(size=13, color=INK))
+    seen: set[int] = set()
+    for y in years:  # oldest first, so the legend reads in year order
+        for i, (_, table) in enumerate(panels):
+            if y not in table.columns:
+                continue
+            col = table[y].dropna()
+            if col.empty:
+                continue
+            r, c = divmod(i, ncols)
+            x = [pd.Timestamp(2001, int(p), 1) if roll == "Month" else pd.Timestamp(2001, 1, 1) + pd.Timedelta(days=7 * (int(p) - 1))
+                 for p in col.index]
+            latest = y == years[-1]
+            fig.add_trace(go.Scatter(
+                x=x, y=col.values, name=str(y), legendgroup=str(y), showlegend=y not in seen,
+                mode="lines+markers" if latest and roll == "Month" else "lines",
+                line=dict(color=colors[y], width=3 if latest else 1.75), marker=dict(size=8, line=dict(color=SURFACE, width=2)),
+                hovertemplate="%{y:,.0f}<extra>" + str(y) + "</extra>"), row=r + 1, col=c + 1)
+            seen.add(y)
+    fig.update_layout(
+        height=max(panel_height * nrows, 300) + 30, margin=dict(l=8, r=8, t=84, b=8), hovermode="x unified",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+        legend=dict(orientation="h", yref="container", y=1, yanchor="top", x=0, font=dict(color=INK_2)),
+        hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
+    fig.update_xaxes(showgrid=False, linecolor=GRID, tickfont=dict(color=INK_3), tickformat="%b")
+    fig.update_yaxes(gridcolor=GRID, zeroline=False, rangemode="tozero", tickfont=dict(color=INK_3), separatethousands=True)
+    return fig
+
+
+def yoy_tables_view(panels: list[tuple[str, pd.DataFrame]], roll: str) -> pd.DataFrame:
+    """All panels' year-over-year tables in one frame (rows: series and month or week; columns: years)."""
+    out = pd.concat({t: tb.rename(index=lambda p: position_label(p, roll)) for t, tb in panels}, names=["", ""])
+    out.columns = [str(int(c)) for c in out.columns]
+    return out
+
+
 # --- app --------------------------------------------------------------------
 
 if not config.DB_PATH.exists():
@@ -207,45 +268,73 @@ tab_over, tab_chan, tab_posts, tab_yt, tab_data = st.tabs(["Overview", "Channels
 
 # ---- Overview --------------------------------------------------------------
 with tab_over:
-    fam_key = st.selectbox("Measure", list(config.FAMILIES), format_func=lambda k: config.FAMILIES[k][0])
+    c_a, c_b = st.columns([3, 2])
+    fam_key = c_a.selectbox("Measure", list(config.FAMILIES), format_func=lambda k: config.FAMILIES[k][0])
+    view = c_b.radio("View", ["Over time", "Year over year"], horizontal=True, key="view_over")
     label, comps, caveat = config.FAMILIES[fam_key]
-    span = (d1 - d0).days + 1
-    prev0, prev1 = d0 - timedelta(days=span), d0 - timedelta(days=1)
-    daily_fam = family_series(daily, fam_key, "Day")
-    has_prev = prev1.date() >= lo  # is there any data before the selected range?
-    st.caption(f"{d0:%b %d} – {d1:%b %d, %Y} ({span} days)"
-               + (f" compared with the {span} days before it. " if has_prev else "; no earlier data to compare with. ") + caveat)
-
-    cols = st.columns(len(comps))
-    for col, platform in zip(cols, comps):
-        s = daily_fam[daily_fam.platform == platform].set_index("bucket")["value"]
-        cur = s[(s.index >= d0) & (s.index <= d1)].sum()
-        prev = s[(s.index >= prev0) & (s.index <= prev1)].sum()
-        col.metric(config.LABELS[platform], f"{cur:,.0f}", pct_change(cur, prev) if prev else None)
-
-    fam = family_series(daily, fam_key, rollup)
-    fam = fam[(fam.bucket >= d0) & (fam.bucket <= d1)]
-    panels = []
-    for platform in comps:
-        g = fam[fam.platform == platform].sort_values("bucket")
-        if g.empty:
-            continue
-        s = g.set_index("bucket")["value"]
-        panels.append(dict(title=config.LABELS[platform], color=config.COLORS[platform], x=g.bucket, y=g.value,
-                           avg=smooth7(s).values if rollup == "Day" else None,
-                           breaks=config.CHART_BREAKS.get((fam_key, platform), [])))
-    if panels:
-        st.subheader(f"{label}, by {rollup.lower()}")
-        if rollup == "Day":
-            st.caption("Thin line: each day. Bold line: 7-day average. Each panel has its own scale.")
+    if view == "Year over year":
+        roll = "Week" if rollup == "Week" else "Month"
+        series = {pl: daily_series(daily, pl, comps[pl]) for pl in comps}
+        series = {pl: sr for pl, sr in series.items() if not sr.empty}
+        st.caption(f"Every year with data, one line per year, whole {roll.lower()}s only. The date range does not apply here. " + caveat)
+        cols = st.columns(len(series))
+        for col, (pl, sr) in zip(cols, series.items()):
+            r = ytd_vs_prior(sr)
+            col.metric(f"{config.LABELS[pl]} {r['year']} to {r['last']:%b %d}", f"{r['cur']:,.0f}",
+                       pct_change(r["cur"], r["prev"]) if r["prev"] else None,
+                       help="Compared with the same dates a year earlier." if r["prev"] else "No data back to the start of last year.")
+        panels = [(config.LABELS[pl], yoy_table(sr, roll)) for pl, sr in series.items()]
+        panels = [(t, tb) for t, tb in panels if not tb.empty]
+        if panels:
+            st.subheader(f"{label}, year over year")
+            st.caption("One line per year; the latest year is the darkest. Each panel has its own scale.")
+            for (fam, pl), breaks in config.CHART_BREAKS.items():
+                if fam == fam_key and pl in series:
+                    for when, note in breaks:
+                        st.caption(f"{config.LABELS[pl]}: {note} from {pd.Timestamp(when):%b %d, %Y}. Years either side are not like for like.")
+            show(yoy_figure(panels, roll))
+            with st.expander("Table view"):
+                st.dataframe(yoy_tables_view(panels, roll).style.format("{:,.0f}", na_rep="–"), width="stretch")
         else:
-            st.caption("Each panel has its own scale.")
-        show(multiples(panels))
-        with st.expander("Table view"):
-            st.dataframe(fam.pivot(index="bucket", columns="platform", values="value").rename(columns=config.LABELS),
-                         width="stretch")
+            st.warning("Not enough complete months of data for a year-over-year view.")
     else:
-        st.warning("No data in this date range.")
+        span = (d1 - d0).days + 1
+        prev0, prev1 = d0 - timedelta(days=span), d0 - timedelta(days=1)
+        daily_fam = family_series(daily, fam_key, "Day")
+        has_prev = prev1.date() >= lo  # is there any data before the selected range?
+        st.caption(f"{d0:%b %d} – {d1:%b %d, %Y} ({span} days)"
+                   + (f" compared with the {span} days before it. " if has_prev else "; no earlier data to compare with. ") + caveat)
+
+        cols = st.columns(len(comps))
+        for col, platform in zip(cols, comps):
+            s = daily_fam[daily_fam.platform == platform].set_index("bucket")["value"]
+            cur = s[(s.index >= d0) & (s.index <= d1)].sum()
+            prev = s[(s.index >= prev0) & (s.index <= prev1)].sum()
+            col.metric(config.LABELS[platform], f"{cur:,.0f}", pct_change(cur, prev) if prev else None)
+
+        fam = family_series(daily, fam_key, rollup)
+        fam = fam[(fam.bucket >= d0) & (fam.bucket <= d1)]
+        panels = []
+        for platform in comps:
+            g = fam[fam.platform == platform].sort_values("bucket")
+            if g.empty:
+                continue
+            s = g.set_index("bucket")["value"]
+            panels.append(dict(title=config.LABELS[platform], color=config.COLORS[platform], x=g.bucket, y=g.value,
+                               avg=smooth7(s).values if rollup == "Day" else None,
+                               breaks=config.CHART_BREAKS.get((fam_key, platform), [])))
+        if panels:
+            st.subheader(f"{label}, by {rollup.lower()}")
+            if rollup == "Day":
+                st.caption("Thin line: each day. Bold line: 7-day average. Each panel has its own scale.")
+            else:
+                st.caption("Each panel has its own scale.")
+            show(multiples(panels))
+            with st.expander("Table view"):
+                st.dataframe(fam.pivot(index="bucket", columns="platform", values="value").rename(columns=config.LABELS),
+                             width="stretch")
+        else:
+            st.warning("No data in this date range.")
 
 # ---- Channels --------------------------------------------------------------
 with tab_chan:
@@ -255,39 +344,55 @@ with tab_chan:
     default = [m for m in avail if m in {"views", "video_views", "impressions", "interactions", "reach", "viewers",
                                          "total_viewers", "followers_change", "new_followers", "new_likes"}][:4]
     chosen = st.multiselect("Metrics", avail, default=default or avail[:4], format_func=lambda m: m.replace("_", " ").capitalize())
-    show_posts = False
-    if not posts.empty and platform in set(posts.platform):
-        show_posts = st.checkbox("Mark days a post was published", value=True,
-                                 help="Shows the days the scheduler published to this channel (data currently covers only the months you have exported).")
-    panels, tables = [], {}
-    for m in chosen:
-        s = metric_series(daily, platform, m, rollup)
-        s = s[(s.index >= d0) & (s.index <= d1)]
-        if s.empty:
-            continue
-        panels.append(dict(title=m.replace("_", " ").capitalize(), color=config.COLORS[platform], x=s.index, y=s.values,
-                           avg=smooth7(s).values if rollup == "Day" else None))
-        tables[m] = s
-    if panels:
-        fig = multiples(panels)
-        if show_posts and rollup == "Day":
-            pdays = posts[(posts.platform == platform) & (posts.date >= d0) & (posts.date <= d1)]
-            if not pdays.empty:
-                for i, p in enumerate(panels):
-                    r, c = divmod(i, 2)
-                    pts =pd.Series(p["y"], index=pd.to_datetime(p["x"])).reindex(pdays.date).dropna()
-                    posts_n = pdays.set_index("date")["posts"].reindex(pts.index)
-                    fig.add_trace(go.Scatter(
-                        x=pts.index, y=pts.values, mode="markers", name="Post published", showlegend=False,
-                        marker=dict(size=8, color=SURFACE, line=dict(color=INK, width=2)), customdata=posts_n.values,
-                        hovertemplate="%{x|%b %d, %Y}<br>%{y:,.0f}<br>%{customdata:.0f} post(s) published<extra></extra>"),
-                        row=r + 1, col=c + 1)
-                st.caption("○ = a day the scheduler published a post to this channel.")
-        show(fig)
-        with st.expander("Table view"):
-            st.dataframe(pd.DataFrame(tables).rename(columns=lambda m: m.replace("_", " ").capitalize()), width="stretch")
+    view_c = st.radio("View", ["Over time", "Year over year"], horizontal=True, key="view_chan")
+    if view_c == "Year over year":
+        roll = "Week" if rollup == "Week" else "Month"
+        skipped = [m for m in chosen if m in config.NON_ADDITIVE_METRICS]
+        panels = [(m.replace("_", " ").capitalize(), yoy_table(daily_series(daily, platform, [m]), roll))
+                  for m in chosen if m not in config.NON_ADDITIVE_METRICS]
+        panels = [(t, tb) for t, tb in panels if not tb.empty]
+        st.caption(f"Every year with data, one line per year (latest darkest), whole {roll.lower()}s only. The date range does not apply here."
+                   + (" Running totals are left out." if skipped else ""))
+        if panels:
+            show(yoy_figure(panels, roll))
+            with st.expander("Table view"):
+                st.dataframe(yoy_tables_view(panels, roll).style.format("{:,.0f}", na_rep="–"), width="stretch")
+        else:
+            st.warning("Not enough complete months of data for a year-over-year view of these metrics.")
     else:
-        st.warning("Nothing to show for this selection and range.")
+        show_posts = False
+        if not posts.empty and platform in set(posts.platform):
+            show_posts = st.checkbox("Mark days a post was published", value=True,
+                                     help="Shows the days the scheduler published to this channel (data currently covers only the months you have exported).")
+        panels, tables = [], {}
+        for m in chosen:
+            s = metric_series(daily, platform, m, rollup)
+            s = s[(s.index >= d0) & (s.index <= d1)]
+            if s.empty:
+                continue
+            panels.append(dict(title=m.replace("_", " ").capitalize(), color=config.COLORS[platform], x=s.index, y=s.values,
+                               avg=smooth7(s).values if rollup == "Day" else None))
+            tables[m] = s
+        if panels:
+            fig = multiples(panels)
+            if show_posts and rollup == "Day":
+                pdays = posts[(posts.platform == platform) & (posts.date >= d0) & (posts.date <= d1)]
+                if not pdays.empty:
+                    for i, p in enumerate(panels):
+                        r, c = divmod(i, 2)
+                        pts =pd.Series(p["y"], index=pd.to_datetime(p["x"])).reindex(pdays.date).dropna()
+                        posts_n = pdays.set_index("date")["posts"].reindex(pts.index)
+                        fig.add_trace(go.Scatter(
+                            x=pts.index, y=pts.values, mode="markers", name="Post published", showlegend=False,
+                            marker=dict(size=8, color=SURFACE, line=dict(color=INK, width=2)), customdata=posts_n.values,
+                            hovertemplate="%{x|%b %d, %Y}<br>%{y:,.0f}<br>%{customdata:.0f} post(s) published<extra></extra>"),
+                            row=r + 1, col=c + 1)
+                    st.caption("○ = a day the scheduler published a post to this channel.")
+            show(fig)
+            with st.expander("Table view"):
+                st.dataframe(pd.DataFrame(tables).rename(columns=lambda m: m.replace("_", " ").capitalize()), width="stretch")
+        else:
+            st.warning("Nothing to show for this selection and range.")
 
 # ---- Posts (scheduler) ------------------------------------------------------
 with tab_posts:
@@ -407,25 +512,52 @@ with tab_yt:
         show(fig)
 
         in_months = yt[yt.metric == metric].merge(months[["period_start", "period_end", "label"]], on=["period_start", "period_end"])
+        order = months.label.tolist()
         if in_months.period_start.nunique() >= 2:
-            st.subheader(f"{name(metric)}, month by month")
-            order = months.label.tolist()
-            by_month = in_months.groupby("label")["value"].sum().reindex([m for m in order if m in set(in_months.label)])
-            fig = go.Figure(go.Bar(
-                x=by_month.index, y=by_month.values, marker=dict(color=BLUE, cornerradius=4),
-                text=[f"{v:,.0f}" for v in by_month.values], textposition="outside", cliponaxis=False,
-                textfont=dict(color=INK_2, size=12), hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>"))
-            fig.update_layout(
-                height=300, margin=dict(l=8, r=8, t=24, b=8), bargap=0.45,
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
-                yaxis=dict(gridcolor=GRID, zeroline=False, rangemode="tozero", tickfont=dict(color=INK_3), separatethousands=True),
-                xaxis=dict(tickfont=dict(color=INK)), hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
-            show(fig)
-            tbl = in_months.pivot_table(index="series", columns="label", values="value", aggfunc="sum")
-            with st.expander("Series by month (table view)"):
-                st.dataframe(tbl[[m for m in order if m in tbl.columns]].style.format("{:,.0f}", na_rep="–"), width="stretch")
-            st.caption("Each month counts the videos listed in that month's export (up to 500).")
+            when = pd.to_datetime(in_months.period_start)
+            in_months = in_months.assign(year=when.dt.year, month_no=when.dt.month)
+            grain = st.radio("Group the months by", ["Month", "Year", "Year over year"], horizontal=True, key="yt_group")
+            st.subheader(f"{name(metric)}, {'month by month' if grain == 'Month' else 'by year' if grain == 'Year' else 'year over year'}")
+
+            def bars(x, y, hover, height=300):
+                fig = go.Figure(go.Bar(
+                    x=x, y=y, marker=dict(color=BLUE, cornerradius=4), text=[f"{v:,.0f}" for v in y], textposition="outside",
+                    cliponaxis=False, textfont=dict(color=INK_2, size=12), customdata=hover,
+                    hovertemplate="%{x}<br>%{y:,.0f}<br>%{customdata}<extra></extra>"))
+                fig.update_layout(
+                    height=height, margin=dict(l=8, r=8, t=24, b=8), bargap=0.45,
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+                    yaxis=dict(gridcolor=GRID, zeroline=False, rangemode="tozero", tickfont=dict(color=INK_3), separatethousands=True),
+                    xaxis=dict(tickfont=dict(color=INK), type="category"),
+                    hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
+                return fig
+
+            if grain == "Month":
+                by_month = in_months.groupby("label")["value"].sum().reindex([m for m in order if m in set(in_months.label)])
+                show(bars(by_month.index, by_month.values, [""] * len(by_month)))
+                tbl = in_months.pivot_table(index="series", columns="label", values="value", aggfunc="sum")
+                tbl = tbl[[m for m in order if m in tbl.columns]]
+                table_title = "Series by month (table view)"
+            elif grain == "Year":
+                by_year = in_months.groupby("year").agg(value=("value", "sum"), months=("period_start", "nunique"))
+                show(bars([str(y) for y in by_year.index], by_year["value"].values,
+                          [f"{n} of 12 months loaded" if n < 12 else "all 12 months" for n in by_year["months"]]))
+                tbl = in_months.pivot_table(index="series", columns="year", values="value", aggfunc="sum")
+                tbl.columns = [str(c) for c in tbl.columns]
+                table_title = "Series by year (table view)"
+            else:
+                by_pos = in_months.pivot_table(index="month_no", columns="year", values="value", aggfunc="sum")
+                show(yoy_figure([(name(metric), by_pos)], "Month", ncols=1, panel_height=340))
+                tbl = by_pos.rename(index=lambda p: position_label(p, "Month"))
+                tbl.columns = [str(int(c)) for c in tbl.columns]
+                table_title = "Month by year (table view)"
+            with st.expander(table_title):
+                st.dataframe(tbl.style.format("{:,.0f}", na_rep="–"), width="stretch")
+            partial = in_months.groupby("year")["period_start"].nunique()
+            st.caption("Each month counts the videos listed in that month's export (up to 500)."
+                       + (" Years with fewer than 12 months loaded: " + ", ".join(f"{y} ({n})" for y, n in partial.items() if n < 12) + "."
+                          if grain != "Month" and (partial < 12).any() else ""))
 
         st.subheader("Videos")
         f1, f2 = st.columns([2, 3])

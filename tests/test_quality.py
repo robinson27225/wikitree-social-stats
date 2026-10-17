@@ -86,3 +86,41 @@ def test_daily_series_sums_metrics_and_falls_back_when_one_is_missing():
     assert s.tolist() == [600.0, 640.0, 650.0]                   # reach where there is one (not summed with viewers), else viewers
     assert daily_series(daily, "facebook", ["reach", "viewers"]).iloc[0] == 1210.0   # plain list still sums
     assert daily_series(daily, "tiktok", ["video_views"]).empty
+
+
+def _daily(start, end, per_day=1.0, hole=None):
+    idx = pd.date_range(start, end)
+    s = pd.Series(per_day, index=idx)
+    return s.drop(pd.to_datetime(hole)) if hole is not None else s
+
+
+def test_yoy_table_has_a_column_per_year_and_drops_incomplete_months():
+    from wtstats.series import yoy_table
+    s = _daily("2023-05-03", "2025-10-15")          # starts mid-May 2023, ends mid-Oct 2025
+    t = yoy_table(s, "Month")
+    assert list(t.columns) == [2023, 2024, 2025]
+    assert pd.isna(t.loc[5, 2023]) and t.loc[6, 2023] == 30          # May 2023 started on the 3rd, so it is left out
+    assert pd.isna(t.loc[10, 2025]) and t.loc[9, 2025] == 30         # Oct 2025 stops on the 15th, so it is left out
+    assert t.loc[2, 2024] == 29 and t.loc[2, 2025] == 28             # leap year handled by the calendar
+
+
+def test_yoy_table_weeks_use_whole_weeks_only():
+    from wtstats.series import yoy_table
+    t = yoy_table(_daily("2024-01-03", "2025-02-20"), "Week")        # Wed start, Thu end
+    vals = t.to_numpy().ravel()
+    assert (vals[~pd.isna(vals)] == 7).all()                         # every filled cell is exactly one whole week
+    assert pd.isna(t.loc[1, 2024])                                   # the first, partial week is out
+    assert t.index.max() <= 52                                       # a week starting Dec 29-31 (week 53) is out
+
+
+def test_yoy_table_empty_series():
+    from wtstats.series import yoy_table
+    assert yoy_table(pd.Series(dtype=float)).empty
+
+
+def test_ytd_vs_prior_compares_the_same_dates():
+    from wtstats.series import ytd_vs_prior
+    s = _daily("2025-01-01", "2026-03-10")
+    r = ytd_vs_prior(s)
+    assert r["year"] == 2026 and r["cur"] == 69 and r["prev"] == 69   # Jan 1-Mar 10 each year (2026 has no leap day)
+    assert ytd_vs_prior(_daily("2025-06-01", "2026-03-10"))["prev"] is None   # no data back to Jan 1, 2025

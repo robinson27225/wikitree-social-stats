@@ -39,6 +39,11 @@ Each file is recognised by its columns, so you do not say which channel it is:
   not kept, because the repository is public. Older header names are mapped onto the current ones
   (`Impressions (total)` -> `impressions`; TikTok 2023 `New Followers` and LinkedIn's `Total followers` -> the daily follower
   change); a repeated header or date-only block further down a tab is ignored.
+- **Meta Insights exports** (one metric per file, UTF-16, starting `sep=,`) don't say which channel they are from:
+  `python -m wtstats import --platform instagram --from 2025-08-22 Interactions.csv`. The metric comes from the file's
+  title (`META_EXPORT_METRICS` in `wtstats/config.py`, or pass `--metric`). `--from` / `--until` limit the days loaded,
+  for a metric that only existed from a date: Instagram's *Content interactions* is zero before Aug 22, 2025, which means
+  "not available", not zero, so those days are not loaded.
 - Monthly history files work the same way; a date like `2026-01` or `Jan 2026` is stored as a month.
 
 ## How the numbers are handled
@@ -62,6 +67,14 @@ Each file is recognised by its columns, so you do not say which channel it is:
 - Dates are used as exported. The scheduler's date is the published date in Pacific time.
 
 Channel rules (which columns identify a platform, what to drop, blank handling, YouTube series, dashboard metric groups) are all in `wtstats/config.py`.
+
+## Reading the dashboard
+
+- **Over time** or **Year over year** (Overview and Channels): year over year lays every year with data over Jan-Dec, one
+  line per year (the latest is darkest). It uses whole months or weeks only, ignores the date range, and each card compares
+  the year so far with the same dates a year earlier. Running totals (TikTok follower total) are left out.
+- **YouTube:** group the monthly files by **Month**, **Year** or **Year over year**.
+- A dotted line marks where a measure changes (`CHART_BREAKS`).
 
 ## Hosting (Streamlit Community Cloud)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import io
 import re
 import shutil
 import sqlite3
@@ -72,6 +73,34 @@ def read_csv(path: Path) -> pd.DataFrame:
     return df
 
 
+def _decode(path: Path) -> str:
+    raw = path.read_bytes()
+    return raw.decode("utf-16" if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig", errors="replace")
+
+
+def is_meta_export(text: str) -> bool:
+    lines = text.lstrip("\ufeff").splitlines()
+    return bool(lines) and lines[0].strip().lower() == "sep=,"
+
+
+def read_meta_export(text: str, metric: str | None = None) -> tuple[str, pd.DataFrame]:
+    """A Meta Insights single-metric export -> (the metric it holds, DataFrame with date and that metric)."""
+    lines = [ln for ln in text.lstrip("\ufeff").splitlines() if ln.strip()]
+    if len(lines) < 3:
+        raise ImportError_("this looks like a Meta export but has no data rows")
+    title = lines[1].strip().strip('"')
+    name = metric or config.META_EXPORT_METRICS.get(title.lower())
+    if not name:
+        raise ImportError_(f"don't know which metric {title!r} is; pass --metric (e.g. interactions) "
+                           f"or add it to META_EXPORT_METRICS in wtstats/config.py")
+    df = pd.read_csv(io.StringIO("\n".join(lines[2:])), dtype=str, keep_default_na=False)
+    df.columns = [normalize_header(c) for c in df.columns]
+    if not {"date", "primary"} <= set(df.columns):
+        raise ImportError_(f"expected Date and Primary columns in the Meta export, found {list(df.columns)}")
+    df["date"] = df["date"].str[:10]  # "2025-06-01T00:00:00" -> "2025-06-01"
+    return name, df.rename(columns={"primary": name})[["date", name]]
+
+
 def detect_kind(columns: set[str]) -> tuple[str, str | None]:
     """Return (kind, platform) for a file's normalised columns."""
     if config.SCHEDULER_SIGNATURE <= columns:
@@ -131,7 +160,8 @@ def classify_series(title: str) -> str:
 
 # --- loaders ----------------------------------------------------------------
 
-def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, import_id: int) -> tuple[int, int, str]:
+def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, import_id: int,
+                 since: str | None = None, until: str | None = None) -> tuple[int, int, str]:
     rename = {old: new for old, new in config.RENAME_METRICS.get(platform, {}).items() if old in df.columns and new not in df.columns}
     if rename:
         df = df.rename(columns=rename)  # the same figure under an older or different export's name
@@ -147,6 +177,8 @@ def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, impo
             gran, start = parse_period(rec["date"])
         except ImportError_ as e:
             raise ImportError_(f"row {n}: {e}") from None
+        if (since and start < since) or (until and start > until):
+            continue  # outside the days the caller asked for
         values = {m: parse_number(rec[m]) for m in metrics}
         if all(v is None for v in values.values()):
             continue  # the sheets are pre-filled with empty future dates
@@ -167,7 +199,8 @@ def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, impo
            DO UPDATE SET value = excluded.value, import_id = excluded.import_id""",
         out,
     )
-    return read, loaded, ""
+    limits = [f"{label} {d}" for label, d in (("from", since), ("until", until)) if d]
+    return read, loaded, ("only days " + " and ".join(limits)) if limits else ""
 
 
 def import_scheduler(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int) -> tuple[int, int, str]:
@@ -393,9 +426,15 @@ def import_file(
     raw_dir: Path | None = None,
     platform: str | None = None,
     period: str | None = None,
+    metric: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
     force: bool = False,
 ) -> dict:
-    """Archive and load one export file. Returns a summary dict (status 'imported' or 'skipped')."""
+    """Archive and load one export file. Returns a summary dict (status 'imported' or 'skipped').
+
+    `since` / `until` (ISO dates) limit which days of a daily file are loaded, e.g. when a metric only existed from a date.
+    """
     path = Path(path)
     raw_dir = Path(raw_dir or config.RAW_DIR)
     digest = sha256_file(path)
@@ -403,16 +442,33 @@ def import_file(
     if seen and not force:
         return {"status": "skipped", "file": path.name, "reason": f"already imported as {seen[1]!r}"}
 
+    for label, d in (("--from", since), ("--until", until)):
+        if d:
+            try:
+                date.fromisoformat(d)
+            except ValueError:
+                raise ImportError_(f"{label} must be a date like 2025-08-22, got {d!r}") from None
+
     if path.suffix.lower() in (".xlsx", ".xlsm", ".xls"):
+        if since or until:
+            raise ImportError_("--from and --until work on a single CSV file, not on a workbook")
         return import_workbook(conn, path, raw_dir=raw_dir, force=force)
 
-    df = read_csv(path)
-    try:
-        kind, detected = detect_kind(set(df.columns))
-    except ImportError_:
+    text = _decode(path)
+    if is_meta_export(text):
         if not platform:
-            raise
-        kind, detected = "daily", platform  # the caller named the channel
+            raise ImportError_(f"{path.name} is a Meta single-metric export and does not say which channel it is from; "
+                               "pass --platform facebook or --platform instagram")
+        _, df = read_meta_export(text, metric)
+        kind, detected = "daily", platform
+    else:
+        df = read_csv(path)
+        try:
+            kind, detected = detect_kind(set(df.columns))
+        except ImportError_:
+            if not platform:
+                raise
+            kind, detected = "daily", platform  # the caller named the channel
     platform = platform or detected
 
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -442,7 +498,7 @@ def import_file(
 
     notes = []
     if kind == "daily":
-        read, loaded, note = import_daily(conn, df, platform, import_id)
+        read, loaded, note = import_daily(conn, df, platform, import_id, since, until)
     elif kind == "scheduler":
         read, loaded, note = import_scheduler(conn, df, import_id)
     else:
