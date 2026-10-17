@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from . import config, db
-from .importers import ImportError_, import_file
+from .importers import ImportError_, find_imports, import_file, import_row_counts, remove_import
 
 
 def cmd_import(args) -> int:
@@ -29,6 +29,26 @@ def cmd_import(args) -> int:
             for n in r["notes"]:
                 print(f"           note: {n}")
     return 1 if failed else 0
+
+
+def cmd_remove(args) -> int:
+    conn = db.connect(args.db)
+    found = find_imports(conn, args.file)
+    if len(found) != 1:
+        print(f"FAILED   {args.file!r} matches {len(found)} imports" + ("" if not found else ":"))
+        for i, kind, name, _ in found:
+            print(f"           {name} ({kind})")
+        return 1
+    import_id, kind, name, archived = found[0]
+    counts = import_row_counts(conn, import_id)
+    print(f"{name} ({kind}) loaded: " + ", ".join(f"{n} rows in {t}" for t, n in counts.items() if n))
+    print(f"Removing it deletes those rows, its import-log entry and the archived copy {archived}.")
+    if not args.yes:
+        print("Nothing changed. Run again with --yes to remove it.")
+        return 0
+    done = remove_import(conn, import_id)
+    print("removed  " + name + ": " + ", ".join(f"{n} {t}" for t, n in done.items() if n))
+    return 0
 
 
 def cmd_status(args) -> int:
@@ -71,6 +91,11 @@ def main(argv=None) -> int:
     pi.add_argument("--raw-dir", default=config.RAW_DIR, help="where untouched copies of the files are kept")
     pi.add_argument("--force", action="store_true", help="re-import a file that was already imported")
     pi.set_defaults(func=cmd_import)
+
+    pr = sub.add_parser("remove", help="remove an import: its data, log entry and archived file")
+    pr.add_argument("file", help="part of the file name (or checksum) shown by `status` / the Imports table")
+    pr.add_argument("--yes", action="store_true", help="really remove it (without this it only shows what would go)")
+    pr.set_defaults(func=cmd_remove)
 
     ps = sub.add_parser("status", help="show what is loaded")
     ps.set_defaults(func=cmd_status)

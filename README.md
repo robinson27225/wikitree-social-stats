@@ -31,6 +31,8 @@ Each file is recognised by its columns, so you do not say which channel it is:
   dashboard keeps them apart and never adds them together. Each file's own columns are kept, so a saved view in
   YouTube Studio gives the same columns every month.
 - A YouTube export lists at most 500 videos (the top 500 by likes). A video missing from a month is not necessarily zero.
+- **To undo an import:** `python -m wtstats remove <part of the file name>` shows what would go; add `--yes` to delete
+  that file's data, its import-log entry and its archived copy. Values a later file replaced stay.
 - Monthly history files work the same way; a date like `2026-01` or `Jan 2026` is stored as a month.
 
 ## How the numbers are handled

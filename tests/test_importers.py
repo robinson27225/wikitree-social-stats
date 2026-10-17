@@ -232,3 +232,29 @@ def test_classify_series():
     assert classify_series("#SourceAThon - 2 Oct 2026 8AM ET Kick-Off  Livecast") == "SourceAThon"
     assert classify_series("WikiTree #SaturdayRoundup (21 Feb 2026)") == "Saturday Roundup"
     assert classify_series("What is WikiTree?") == "Other"
+
+
+def test_remove_import_deletes_its_data_log_entry_and_archived_copy(env):
+    from wtstats.importers import find_imports, remove_import
+    conn, raw, _ = env
+    run(env, "sched.csv", SCHED)
+    run(env, "WikiTreers_YT_July_2026.csv", YT_JULY)
+    run(env, "Table_data.csv", YT_YTD, period="2026-01-01:2026-10-17")
+    (ytd_id, *_), = find_imports(conn, "Table_data")
+    remove_import(conn, ytd_id)
+    assert not rows(conn, "SELECT 1 FROM youtube_stats WHERE period_start = '2026-01-01'")
+    assert rows(conn, "SELECT COUNT(*) FROM youtube_stats WHERE period_start = '2026-07-01'")[0][0] > 0  # other imports untouched
+    assert rows(conn, "SELECT video_id FROM youtube_videos WHERE video_id = '0hT6pZNaMoQ'") == []  # only in the removed file
+    assert rows(conn, "SELECT video_id FROM youtube_videos WHERE video_id = 'MDZ13G7HSPY'") != []  # still used by July
+    assert find_imports(conn, "Table_data") == [] and not list(raw.glob("*_Table_data.csv"))
+    assert rows(conn, "SELECT COUNT(*) FROM post_day_metrics")[0][0] > 0
+
+
+def test_remove_keeps_values_a_later_import_replaced(env):
+    from wtstats.importers import find_imports, remove_import
+    conn = env[0]
+    run(env, "fb1.csv", FB)
+    run(env, "fb2.csv", "Date,Reach,Page Visits,New Likes,Link Clicks,Interactions,Views,Viewers\n01/01/2026,,5,2,5,59,3000,866\n")
+    (first_id, *_), = find_imports(conn, "fb1")
+    remove_import(conn, first_id)
+    assert rows(conn, "SELECT value FROM daily_metrics WHERE period_start='2026-01-01' AND metric='views'") == [(3000.0,)]

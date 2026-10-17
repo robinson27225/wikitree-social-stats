@@ -322,3 +322,43 @@ def import_file(
     conn.commit()
     return {"status": "imported", "file": path.name, "kind": kind, "platform": platform,
             "rows_read": read, "rows_loaded": loaded, "notes": notes}
+
+
+# --- removal ----------------------------------------------------------------
+
+_IMPORT_TABLES = ("daily_metrics", "post_day_metrics", "youtube_stats")
+
+
+def find_imports(conn: sqlite3.Connection, text: str) -> list[tuple]:
+    """Imports whose file name or checksum contains `text`: (id, kind, source_name, archived_path)."""
+    like = f"%{text}%"
+    return conn.execute(
+        "SELECT id, kind, source_name, archived_path FROM import_log WHERE source_name LIKE ? OR sha256 LIKE ? ORDER BY id",
+        (like, like),
+    ).fetchall()
+
+
+def import_row_counts(conn: sqlite3.Connection, import_id: int) -> dict[str, int]:
+    return {t: conn.execute(f"SELECT COUNT(*) FROM {t} WHERE import_id = ?", (import_id,)).fetchone()[0] for t in _IMPORT_TABLES}
+
+
+def remove_import(conn: sqlite3.Connection, import_id: int) -> dict[str, int]:
+    """Delete everything an import loaded, its log entry and its archived copy.
+
+    Only rows still attributed to this import go: a value a later file replaced belongs to that file now.
+    """
+    row = conn.execute("SELECT archived_path FROM import_log WHERE id = ?", (import_id,)).fetchone()
+    if row is None:
+        raise ImportError_(f"no import with id {import_id}")
+    counts = {t: conn.execute(f"DELETE FROM {t} WHERE import_id = ?", (import_id,)).rowcount for t in _IMPORT_TABLES}
+    counts["youtube_videos"] = conn.execute(
+        "DELETE FROM youtube_videos WHERE video_id NOT IN (SELECT DISTINCT video_id FROM youtube_stats)").rowcount
+    conn.execute("DELETE FROM import_log WHERE id = ?", (import_id,))
+    conn.execute("DELETE FROM daily_metrics WHERE import_id IS NULL")  # derived values; recomputed from what is left
+    quality.derive_tiktok_follower_change(conn)
+    quality.rebuild_flags(conn)
+    conn.commit()
+    archived = Path(row[0])
+    archived = archived if archived.is_absolute() else config.ROOT / archived
+    archived.unlink(missing_ok=True)
+    return counts
