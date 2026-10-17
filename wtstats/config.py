@@ -72,8 +72,25 @@ TIKTOK_FOLLOWERS_TOTAL_FROM = "2026-09-01"
 
 # (platform, metric, duplicate_of): a month where `metric` equals `duplicate_of`
 # on (nearly) every day is a copy-paste artefact in the export; those values are flagged.
-DUPLICATE_COLUMN_CHECKS = [("facebook", "link_clicks", "page_visits")]
+# Instagram Oct 2022: New Followers is a copy of Profile Visits (normal months: ~1 vs ~2.5 a day).
+DUPLICATE_COLUMN_CHECKS = [
+    ("facebook", "link_clicks", "page_visits"),
+    ("instagram", "new_followers", "profile_visits"),
+]
 DUPLICATE_MIN_DAYS = 15
+
+# (platform_a, platform_b, metric): the same metric identical on both platforms for a month means one
+# sheet was pasted into the other. We cannot tell which is right, so both are flagged.
+# Facebook and Instagram Interactions are identical from Jan 1 to Aug 31, 2024.
+CROSS_PLATFORM_DUPLICATE_CHECKS = [("facebook", "instagram", "interactions")]
+
+# (platform, metric, other_metric, factor): flag `metric` on days it is below factor x `other_metric`.
+# Facebook Views can't be below Viewers. Facebook Reach agrees with Viewers through Aug 2025, then falls to
+# a fraction of it in Sep 2025 (36-243 vs 300-870 a day), so Reach is dropped from there.
+BELOW_CHECKS = [
+    ("facebook", "views", "viewers", 1.0),
+    ("facebook", "reach", "viewers", 0.5),
+]
 
 # --- YouTube series (parsed from titles) -----------------------------------
 # First match wins, so more specific series come first.
@@ -102,8 +119,9 @@ FAMILIES = {
     ),
     "audience": (
         "People reached (daily unique)",
-        {"facebook": ["viewers"], "instagram": ["reach"], "tiktok": ["total_viewers"]},
-        "Daily unique people. Summing days into weeks or months counts repeat viewers more than once.",
+        {"facebook": ["reach|viewers"], "instagram": ["reach"], "tiktok": ["total_viewers"]},
+        "Daily unique people. Summing days into weeks or months counts repeat viewers more than once. "
+        "Facebook is Reach through Aug 2025 and Viewers from Sep 2025 (Meta changed the measure; they agree in Aug 2025).",
     ),
     "engagement": (
         "Engagement (reactions, comments, shares)",
@@ -132,7 +150,7 @@ FAMILIES = {
     ),
     "growth": (
         "New followers (net)",
-        {"facebook": ["new_likes"], "instagram": ["new_followers"], "tiktok": ["followers_change"]},
-        "Facebook counts new page likes. TikTok is net (unfollows subtract). LinkedIn does not export follower data.",
+        {"facebook": ["new_likes"], "instagram": ["new_followers"], "tiktok": ["followers_change"], "linkedin": ["followers"]},
+        "Facebook counts new page likes. TikTok and LinkedIn are net (unfollows subtract). LinkedIn follower data stops at Dec 2024.",
     ),
 }

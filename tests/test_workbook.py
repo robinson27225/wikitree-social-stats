@@ -95,3 +95,30 @@ def test_platform_flag_names_an_unrecognised_daily_csv(env):
     f.write_text("Date,Visits Only\n01/01/2021,5\n")
     r = import_file(conn, f, raw_dir=raw, platform="facebook")
     assert r["platform"] == "facebook" and rows(conn, "SELECT metric FROM daily_metrics") == [("visits_only",)]
+
+
+def test_repeated_header_and_date_only_block_below_the_data_are_ignored(env):
+    conn, raw, tmp = env
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Copy of TT 2024Daily"
+    ws.append(["Date", "Video views", "Profile views", "Likes", "Comments", "Shares", "Followers"])
+    ws.append(["2024-01-01", 48, 5, 1, 2, 0, 0])
+    ws.append([])
+    ws.append(["Date"])                      # a stray second header
+    ws.append(["2024-01-01"])                # followed by dates with nothing beside them
+    ws.append(["2024-01-02"])
+    wb.save(tmp / "tt.xlsx")
+    r = import_file(conn, tmp / "tt.xlsx", raw_dir=raw)
+    assert r["sheets"][0]["rows_loaded"] == 1
+    assert rows(conn, "SELECT COUNT(DISTINCT period_start) FROM daily_metrics") == [(1,)]
+
+
+def test_archived_workbook_leaves_out_the_twitter_tabs(env):
+    conn, raw, tmp = env
+    make_workbook(tmp / "Archive.xlsx")
+    import_file(conn, tmp / "Archive.xlsx", raw_dir=raw)
+    (archived,) = raw.glob("*_Archive.xlsx")
+    kept = openpyxl.load_workbook(archived, read_only=True).sheetnames
+    assert "Copy of WTC TW 2024Daily" not in kept and "Copy of FB 2021Daily" in kept and "Notes" in kept
+    assert len(openpyxl.load_workbook(tmp / "Archive.xlsx", read_only=True).sheetnames) == len(kept) + 1  # the original is untouched

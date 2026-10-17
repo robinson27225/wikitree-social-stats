@@ -136,8 +136,8 @@ def import_daily(conn: sqlite3.Connection, df: pd.DataFrame, platform: str, impo
     zero_fill = config.BLANK_MEANS_ZERO.get(platform, set())
     out, read, loaded = [], 0, 0
     for n, rec in enumerate(df.to_dict("records"), start=2):
-        if str(rec.get("date", "")).strip() == "":
-            continue
+        if str(rec.get("date", "")).strip().lower() in ("", "date"):
+            continue  # blank row, or a header repeated further down the tab
         read += 1
         try:
             gran, start = parse_period(rec["date"])
@@ -279,6 +279,23 @@ def read_workbook(path: Path) -> list[tuple[str, pd.DataFrame]]:
     return out
 
 
+def _is_excluded(title: str) -> bool:
+    return any(re.search(pat, title, flags=re.IGNORECASE) for pat in config.SKIP_SHEET_PATTERNS)
+
+
+def _archive_workbook(path: Path, archived: Path, excluded: list[str]) -> None:
+    """Keep an untouched copy, minus tabs that were left out on purpose (the repository is public)."""
+    if not excluded:
+        shutil.copy2(path, archived)
+        return
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, data_only=True)  # cell values; the tabs that were loaded are otherwise unchanged
+    for title in excluded:
+        del wb[title]
+    wb.save(archived)
+
+
 def import_workbook(conn: sqlite3.Connection, path: Path, *, raw_dir: Path, force: bool = False) -> dict:
     """Load every recognised daily-channel tab of an Excel file. Each tab is logged as its own import."""
     digest = sha256_file(path)
@@ -286,12 +303,12 @@ def import_workbook(conn: sqlite3.Connection, path: Path, *, raw_dir: Path, forc
     raw_dir.mkdir(parents=True, exist_ok=True)
     archived = raw_dir / f"{digest[:8]}_{path.name}"
     if not archived.exists():
-        shutil.copy2(path, archived)
+        _archive_workbook(path, archived, [t for t, _ in sheets if _is_excluded(t)])
 
     results = []
     for title, df in sheets:
         entry = {"sheet": title}
-        if any(re.search(pat, title, flags=re.IGNORECASE) for pat in config.SKIP_SHEET_PATTERNS):
+        if _is_excluded(title):
             results.append({**entry, "status": "skipped", "reason": "left out on purpose (Twitter)"})
             continue
         try:

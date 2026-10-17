@@ -10,7 +10,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from wtstats import config
+from wtstats import config, quality
+from wtstats.series import daily_series
 
 INK = "#0b0b0b"
 INK_2 = "#52514e"
@@ -85,14 +86,15 @@ def family_series(daily: pd.DataFrame, family: str, rollup: str) -> pd.DataFrame
     _, comps, _ = config.FAMILIES[family]
     out = []
     for platform, metrics in comps.items():
-        sub = daily[(daily.platform == platform) & (daily.metric.isin(metrics))]
-        d = sub[sub.granularity == "day"].groupby("period_start")["value"].sum(min_count=1)
+        d = daily_series(daily, platform, metrics)
         if rollup == "Day":
             s = d
         elif rollup == "Week":
             s = d.groupby(d.index.to_period("W-SUN").start_time).sum()
         else:
             s = d.groupby(d.index.to_period("M").start_time).sum()
+            names = [n for m in metrics for n in m.split("|")]
+            sub = daily[(daily.platform == platform) & (daily.metric.isin(names))]
             m = sub[sub.granularity == "month"].groupby("period_start")["value"].sum()
             s = pd.concat([s, m[~m.index.isin(s.index)]]).sort_index()  # monthly history fills months with no daily data
         if not s.empty:
@@ -201,7 +203,9 @@ with tab_over:
     span = (d1 - d0).days + 1
     prev0, prev1 = d0 - timedelta(days=span), d0 - timedelta(days=1)
     daily_fam = family_series(daily, fam_key, "Day")
-    st.caption(f"{d0:%b %d} – {d1:%b %d, %Y} ({span} days) compared with the {span} days before it. " + caveat)
+    has_prev = prev1.date() >= lo  # is there any data before the selected range?
+    st.caption(f"{d0:%b %d} – {d1:%b %d, %Y} ({span} days)"
+               + (f" compared with the {span} days before it. " if has_prev else "; no earlier data to compare with. ") + caveat)
 
     cols = st.columns(len(comps))
     for col, platform in zip(cols, comps):
@@ -466,6 +470,16 @@ with tab_data:
     else:
         fl["Channel"] = fl["Channel"].map(config.LABELS)
         st.dataframe(fl, width="stretch", hide_index=True)
+    st.subheader("Gaps in the data")
+    gaps = quality.find_gaps(sqlite3.connect(config.DB_PATH))
+    if gaps.empty:
+        st.write("None.")
+    else:
+        gaps["platform"] = gaps["platform"].map(config.LABELS)
+        st.dataframe(gaps.rename(columns={"platform": "Channel", "first_missing": "From", "last_missing": "To",
+                                          "days": "Days", "metrics": "Metrics with no value"}),
+                     width="stretch", hide_index=True)
+        st.caption("A blank is not a zero. Weekly and monthly totals that include these days are understated.")
     st.subheader("Reading the numbers")
     st.markdown(
         "- **Empty rows are skipped.** The sheets are pre-filled with future dates; those aren't zeros.\n"
@@ -473,6 +487,8 @@ with tab_data:
         "- **TikTok:** *Followers* was a daily change through August and a running total from Sep 1. The total is stored "
         "separately and the daily change is derived from consecutive days.\n"
         "- **LinkedIn:** the engagement rate is not stored; it can be recomputed from the counts.\n"
+        "- **Small negatives** (-1) in TikTok comments and LinkedIn comments or reposts are deletions in the export, and are kept. "
+        "Follower changes can go negative too: they are net.\n"
         "- **Scheduler totals** follow each day's posts as of the export and keep growing afterwards, so they are only "
         "comparable with other scheduler rows.\n"
         "- **YouTube** is per video. Each file covers one period (a month, or a date range such as year to date) and lists at most "

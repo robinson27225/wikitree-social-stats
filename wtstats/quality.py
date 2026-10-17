@@ -47,16 +47,19 @@ def derive_tiktok_follower_change(conn: sqlite3.Connection) -> None:
 def rebuild_flags(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM data_flags")
 
-    # Facebook: a day cannot have fewer views than viewers.
-    conn.execute(
-        """INSERT OR IGNORE INTO data_flags
-           SELECT 'daily', v.platform, v.period_start, 'views',
-                  'views (' || CAST(v.value AS INT) || ') is lower than viewers (' || CAST(w.value AS INT) || '); likely a bad value in the export'
-           FROM daily_metrics v JOIN daily_metrics w
-             ON w.platform = v.platform AND w.granularity = v.granularity
-            AND w.period_start = v.period_start AND w.metric = 'viewers'
-           WHERE v.platform = 'facebook' AND v.granularity = 'day' AND v.metric = 'views' AND v.value < w.value"""
-    )
+    # A metric far below one it should not be below (e.g. Facebook views under viewers).
+    for platform, metric, other, factor in config.BELOW_CHECKS:
+        conn.execute(
+            """INSERT OR IGNORE INTO data_flags
+               SELECT 'daily', v.platform, v.period_start, v.metric,
+                      v.metric || ' is ' || CASE WHEN ? >= 1 THEN 'lower than ' ELSE 'far below ' END ||
+                      w.metric || ' that day; the export value cannot be right'
+               FROM daily_metrics v JOIN daily_metrics w
+                 ON w.platform = v.platform AND w.granularity = v.granularity
+                AND w.period_start = v.period_start AND w.metric = ?
+               WHERE v.platform = ? AND v.granularity = 'day' AND v.metric = ? AND v.value < w.value * ?""",
+            (factor, other, platform, metric, factor),
+        )
 
     # Copy-paste columns: a month where one column mirrors another is not real data.
     for platform, metric, twin in config.DUPLICATE_COLUMN_CHECKS:
@@ -68,13 +71,65 @@ def rebuild_flags(conn: sqlite3.Connection) -> None:
                WHERE a.platform = ? AND a.granularity = 'day' AND a.metric = ?""",
             conn, params=(twin, platform, metric),
         )
-        if df.empty:
-            continue
-        df["month"] = df["period_start"].str[:7]
-        for month, g in df.groupby("month"):
-            if len(g) >= config.DUPLICATE_MIN_DAYS and (g["a"] == g["b"]).all() and g["a"].sum() > 0:
+        for month, days in _mirrored_months(df):
+            conn.executemany(
+                "INSERT OR IGNORE INTO data_flags VALUES ('daily', ?, ?, ?, ?)",
+                [(platform, d, metric, f"identical to {twin}; the export repeated that column") for d in days],
+            )
+
+    # The same metric identical on two platforms: one sheet was pasted over the other, so flag both.
+    for plat_a, plat_b, metric in config.CROSS_PLATFORM_DUPLICATE_CHECKS:
+        df = pd.read_sql_query(
+            """SELECT a.period_start, a.value AS a, b.value AS b
+               FROM daily_metrics a JOIN daily_metrics b
+                 ON b.granularity = a.granularity AND b.period_start = a.period_start AND b.metric = a.metric
+               WHERE a.platform = ? AND b.platform = ? AND a.granularity = 'day' AND a.metric = ?""",
+            conn, params=(plat_a, plat_b, metric),
+        )
+        for month, days in _mirrored_months(df):
+            for platform, other in ((plat_a, plat_b), (plat_b, plat_a)):
                 conn.executemany(
                     "INSERT OR IGNORE INTO data_flags VALUES ('daily', ?, ?, ?, ?)",
-                    [(platform, d, metric, f"identical to {twin} on every day of {month}; the export repeated that column")
-                     for d in g["period_start"]],
+                    [(platform, d, metric, f"identical to {other}'s {metric}; one sheet was pasted over the other")
+                     for d in days],
                 )
+
+
+def _mirrored_months(df: pd.DataFrame):
+    """Yield (month, [days]) for months where columns a and b match on nearly every day."""
+    if df.empty:
+        return
+    df = df.assign(month=df["period_start"].str[:7])
+    for month, g in df.groupby("month"):
+        if len(g) >= config.DUPLICATE_MIN_DAYS and (g["a"] == g["b"]).mean() >= 0.95 and g["a"].sum() > 0:
+            yield month, list(g["period_start"])
+
+
+def find_gaps(conn: sqlite3.Connection) -> pd.DataFrame:
+    """Days with no value for a metric between its first and last recorded day, as ranges.
+
+    A blank is not a zero: weekly and monthly totals that include these days are understated.
+    Columns: platform, first_missing, last_missing, days, metrics.
+    """
+    d = pd.read_sql_query(
+        "SELECT platform, metric, period_start FROM daily_metrics WHERE granularity = 'day'", conn, parse_dates=["period_start"])
+    rows = []
+    for (platform, metric), g in d.groupby(["platform", "metric"]):
+        days = pd.DatetimeIndex(sorted(g["period_start"].unique()))
+        missing = pd.date_range(days.min(), days.max()).difference(days)
+        if missing.empty:
+            continue
+        start = prev = missing[0]
+        for day in list(missing[1:]) + [None]:
+            if day is not None and (day - prev).days == 1:
+                prev = day
+                continue
+            rows.append((platform, start.date().isoformat(), prev.date().isoformat(), (prev - start).days + 1, metric))
+            if day is not None:
+                start = prev = day
+    if not rows:
+        return pd.DataFrame(columns=["platform", "first_missing", "last_missing", "days", "metrics"])
+    out = pd.DataFrame(rows, columns=["platform", "first_missing", "last_missing", "days", "metric"])
+    return (out.groupby(["platform", "first_missing", "last_missing", "days"])["metric"]
+               .apply(lambda m: ", ".join(sorted(m))).rename("metrics").reset_index()
+               .sort_values(["platform", "first_missing"]).reset_index(drop=True))
