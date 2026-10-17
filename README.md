@@ -1,4 +1,8 @@
+<img src="assets/logo.png" alt="WikiTree" width="96" align="right">
+
 # WikiTree Social Stats
+
+Version 1.0.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -93,6 +97,10 @@ The hosted copy is read-only and public. Its disk is reset on every restart, so 
 3. Commit `data/` and push. The hosted app redeploys by itself.
 
 Files that were already imported are skipped, so re-running with the whole folder is safe.
+
+## Versions
+
+The version lives in `wtstats/__init__.py` (`python -m wtstats --version`) and is shown in the dashboard sidebar. Bump it and add an entry to `CHANGELOG.md` for each release; a test fails if the two disagree.
 
 ## Tests
 

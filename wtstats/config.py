@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("WTSTATS_DATA", ROOT / "data"))
 DB_PATH = DATA_DIR / "stats.db"
 RAW_DIR = DATA_DIR / "raw"
+ASSETS_DIR = ROOT / "assets"
+LOGO = ASSETS_DIR / "logo.png"
+SCHEDULER_URL = "https://wikitree-social-scheduler.fly.dev/"
 
 # Dates in every export are used as given. The scheduler export is the
 # *published* date in Pacific time; the platform exports are the platforms' own days.

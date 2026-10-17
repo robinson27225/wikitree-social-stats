@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from wtstats import config, quality
+from wtstats import __version__, config, quality
 from wtstats.series import daily_series, yoy_table, ytd_vs_prior
 
 INK = "#0b0b0b"
@@ -21,7 +21,9 @@ GRID = "#e8e7e3"
 SURFACE = "#fcfcfb"
 BLUE = config.COLORS["facebook"]
 
-st.set_page_config(page_title="WikiTree Social Stats", page_icon="📊", layout="wide")
+st.set_page_config(page_title="WikiTree Social Stats", page_icon=str(config.LOGO) if config.LOGO.exists() else "📊", layout="wide")
+if config.LOGO.exists():
+    st.logo(str(config.LOGO), size="large")
 st.markdown(
     """<style>
     .block-container {padding-top: 2rem; max-width: 1280px;}
@@ -244,7 +246,10 @@ ver = _db_version()
 daily, posts, yt = load_daily(ver), load_posts(ver), load_youtube(ver)
 day_rows = daily[daily.granularity == "day"]
 
-st.title("WikiTree Social Stats")
+head_logo, head_title = st.columns([1, 14], vertical_alignment="center")
+if config.LOGO.exists():
+    head_logo.image(str(config.LOGO), width=64)
+head_title.title("WikiTree Social Stats")
 
 with st.sidebar:
     st.header("View")
@@ -257,7 +262,9 @@ with st.sidebar:
     rollup = st.radio("Roll up by", ["Day", "Week", "Month"], horizontal=True, index=0)
     st.caption("Weeks start on Monday. The first and last bucket of a range can be partial.")
     st.divider()
+    st.link_button("Social scheduler \u2197", config.SCHEDULER_URL, help="Opens the WikiTree social scheduler in a new tab.")
     st.caption(f"Dates are as exported. Scheduler dates are the published date in {config.TIMEZONE.split('/')[1].replace('_', ' ')} time.")
+    st.caption(f"Version {__version__} \u00b7 data through {end_default:%b %d, %Y}")
 
 if isinstance(rng, tuple) and len(rng) == 2:
     d0, d1 = pd.Timestamp(rng[0]), pd.Timestamp(rng[1])
@@ -397,10 +404,10 @@ with tab_chan:
 # ---- Posts (scheduler) ------------------------------------------------------
 with tab_posts:
     if posts.empty:
-        st.info("No scheduler exports loaded yet.")
+        st.info(f"No scheduler exports loaded yet. They come from the [social scheduler]({config.SCHEDULER_URL}).")
     else:
         st.markdown(
-            "Totals for the posts the scheduler published each day, as of the export. These are **not** the same "
+            f"Totals for the posts the [social scheduler]({config.SCHEDULER_URL}) published each day, as of the export. These are **not** the same "
             "measure as the account-level charts (they follow the posts, not the calendar day), so they are kept separate. "
             "This tab shows everything loaded; the sidebar date range does not apply here."
         )

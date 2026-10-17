@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import config, db
+from . import __version__, config, db
 from .importers import ImportError_, find_imports, import_file, import_row_counts, remove_import
 
 
@@ -87,6 +87,7 @@ def cmd_status(args) -> int:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="wtstats")
+    p.add_argument("--version", action="version", version=f"wtstats {__version__}")
     p.add_argument("--db", default=config.DB_PATH, help="SQLite file (default: data/stats.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
