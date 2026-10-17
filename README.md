@@ -22,7 +22,7 @@ Each file is recognised by its columns, so you do not say which channel it is:
 | Scheduler export (`date,channel,platform,posts,views,...`) | totals for the posts published on that day, per channel |
 | YouTube table export (one file per month, from a saved view) | per-video numbers for the period the file covers |
 
-- **Every file is copied untouched into `data/raw/` before it is read.** The scheduler removes its data after an export, so that copy may be the only one. Back up `data/`.
+- **Every file is copied untouched into `data/raw/` before it is read.** The scheduler removes its data after an export, so that copy may be the only one. `data/` is committed to this repository, so git history is the backup.
 - **Loads never delete or blank anything.** A later file can add or correct values, never erase them. Importing the same file twice is skipped (use `--force` to redo it).
 - **A YouTube file doesn't say which period it covers.** The importer takes the month from the file name
   (`WikiTreers_YT_July_2026.csv` -> July 2026), or you pass `--period 2026-07`, or a range such as
@@ -47,9 +47,28 @@ Each file is recognised by its columns, so you do not say which channel it is:
 
 Channel rules (which columns identify a platform, what to drop, blank handling, YouTube series, dashboard metric groups) are all in `wtstats/config.py`.
 
+## Hosting (Streamlit Community Cloud)
+
+The repository contains the data (`data/raw/` and the built `data/stats.db`), so the app can run straight from it.
+
+1. Go to https://share.streamlit.io and sign in with GitHub.
+2. *Create app* -> pick this repository, branch `main`, main file `app.py`.
+3. Under *Advanced settings* choose Python 3.12 or 3.13. Deploy.
+
+The hosted copy is read-only and public. Its disk is reset on every restart, so new data can only arrive through a commit.
+
+## Monthly update
+
+1. Download the month's exports (use the same saved view for YouTube; put the month in its file name).
+2. `python -m wtstats import <the new files>` and check `python -m wtstats status`.
+3. Commit `data/` and push. The hosted app redeploys by itself.
+
+Files that were already imported are skipped, so re-running with the whole folder is safe.
+
 ## Tests
 
 ```bash
+pip install -r requirements-dev.txt
 python -m pytest
 ```
 

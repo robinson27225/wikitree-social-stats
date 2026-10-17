@@ -241,6 +241,14 @@ def import_youtube(conn: sqlite3.Connection, df: pd.DataFrame, import_id: int, p
 
 # --- orchestration ----------------------------------------------------------
 
+def _portable(path: Path) -> str:
+    """Path relative to the project when possible, so a committed database works on any machine."""
+    try:
+        return path.resolve().relative_to(config.ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -292,7 +300,7 @@ def import_file(
         import_id = conn.execute(
             """INSERT INTO import_log (kind, platform, source_name, sha256, archived_path, imported_at)
                VALUES (?,?,?,?,?,?)""",
-            (kind, platform, path.name, digest, str(archived), datetime.now().isoformat(timespec="seconds")),
+            (kind, platform, path.name, digest, _portable(archived), datetime.now().isoformat(timespec="seconds")),
         ).lastrowid
 
     notes = []
