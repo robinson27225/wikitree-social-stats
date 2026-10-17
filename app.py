@@ -4,6 +4,7 @@ from __future__ import annotations
 import calendar
 import math
 import sqlite3
+import sys
 from datetime import timedelta
 
 import pandas as pd
@@ -11,8 +12,13 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from wtstats import __version__, config, quality
-from wtstats.series import daily_series, yoy_table, ytd_vs_prior
+# A redeploy can reload this script without restarting the server, leaving the previous release's wtstats modules in
+# memory ("cannot import name ..."). Dropping them here means app.py always runs with the code that is on disk.
+for _name in [m for m in sys.modules if m == "wtstats" or m.startswith("wtstats.")]:
+    del sys.modules[_name]
+
+from wtstats import __version__, config, quality  # noqa: E402
+from wtstats.series import daily_series, yoy_table, ytd_vs_prior  # noqa: E402
 
 INK = "#0b0b0b"
 INK_2 = "#52514e"
