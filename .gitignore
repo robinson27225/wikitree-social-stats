@@ -1,0 +1,4 @@
+__pycache__/
+.pytest_cache/
+# raw exports and the database are account statistics; back them up separately
+data/
