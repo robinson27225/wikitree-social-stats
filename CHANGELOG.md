@@ -2,6 +2,15 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.1.1 - 2026-10-17
+
+- YouTube series reorganised to follow the channel's playlists: each format is its own series (WikiTree Week, WikiGames,
+  #CemeterySpotlight, Friday "Night" Bingo, 12 Days of Elf-Mas, WikiTree Meet Our Members, Research Parties, One Name Tuesday,
+  Project Showcase are new). Names now match the playlist titles (WikiTree Saturday Roundup, #ConnectionCheckers, WikiTree Ask
+  Aleš, WikiTree Member Q&A, Link Builders Cubicle Party, WikiTree How To).
+- "#ConnectionFinder: ..." and "Are you related ..." are told apart by how the title starts; the latter is Spotlight Profile
+  Shorts even if it carries the #ConnectionFinder tag.
+
 ## 1.1.0 - 2026-10-17
 
 - Year over year: each year has its own colour (2021 red, 2022 blue, 2023 green, 2024 orange, 2025 gold, 2026 violet);

@@ -207,7 +207,7 @@ def test_youtube_ids_with_leading_space_multiline_titles_footer_and_series(env):
     assert rows(conn, "SELECT value FROM youtube_stats WHERE video_id='MDZ13G7HSPY' AND metric='views'") == [(10276.0,)]
     assert rows(conn, "SELECT title FROM youtube_videos WHERE video_id='0hT6pZNaMoQ'") == [
         ("#OneNameTuesday showcase: Sheldon Almost 6k Sheldon profiles",)]
-    assert rows(conn, "SELECT series FROM youtube_videos WHERE video_id='-MQXzjRbR_E'") == [("Saturday Roundup",)]
+    assert rows(conn, "SELECT series FROM youtube_videos WHERE video_id='-MQXzjRbR_E'") == [("WikiTree Saturday Roundup",)]
 
 
 def test_youtube_export_at_its_row_cap_is_noted(env):
@@ -230,7 +230,7 @@ def test_period_helpers():
 
 def test_classify_series():
     assert classify_series("#SourceAThon - 2 Oct 2026 8AM ET Kick-Off  Livecast") == "SourceAThon"
-    assert classify_series("WikiTree #SaturdayRoundup (21 Feb 2026)") == "Saturday Roundup"
+    assert classify_series("WikiTree #SaturdayRoundup (21 Feb 2026)") == "WikiTree Saturday Roundup"
     assert classify_series("What is WikiTree?") == "Other"
 
 

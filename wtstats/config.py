@@ -134,23 +134,37 @@ CHART_BREAKS = {
 # After changing a rule, run `python -m wtstats reclassify` to refile the videos already loaded.
 SERIES_OVERRIDES_FILE = DATA_DIR / "youtube_series.csv"
 PLAYLIST_COLUMNS = ("playlist", "playlists", "playlist_title", "playlist_titles")
+# Series are named like the owner's YouTube playlists where there is one (e.g. "WikiTree Saturday Roundup"), so a Playlist
+# column and these rules never give the same series two names. Videos are told apart by how a title STARTS where that
+# matters: "#ConnectionFinder: ..." is one series, "Are you related ..." (even ending in #ConnectionFinder) another.
 SERIES_RULES = [
     ("SourceAThon", r"source-?a-?thon"),
     ("ConnectAThon", r"connect-?a-?thon"),
-    ("Saturday Roundup", r"saturday\s*round-?up"),
+    ("WikiTree Saturday Roundup", r"saturday\s*round-?up"),
     ("WikiTree Challenge", r"wikitree challenge|#wtchallenge"),
-    ("Spotlight Profile Shorts", r"are you related|#fridayspotlight"),
-    ("ConnectionCheckers", r"connection\s*(checkers?|combat)"),
-    ("ConnectionFinder", r"connection\s*finder"),
+    ("Spotlight Profile Shorts", r"^\W*(?:#?friday\s*spotlight\W*)?are you related"),
+    ("ConnectionFinder", r"^\W*connection\s*finder"),
+    ("#ConnectionCheckers", r"connection\s*(checkers?|combat)"),
+    ("ConnectionFinder", r"connection\s*finder"),         # a #ConnectionFinder tag later in a title that starts with neither
+    ("Spotlight Profile Shorts", r"#friday\s*spotlight"),
     ("Question of the Week", r"question\s*of\s*the\s*week"),
-    ("Ask Ale\u0161", r"ask ale"),
-    ("Member Q&A", r"member q\s*&\s*a"),
+    ("WikiTree Ask Ale\u0161", r"ask ale"),
+    ("WikiTree Member Q&A", r"member q\s*&\s*a"),
     ("WikiTree Day", r"wikitree\s*day"),
     ("Data Doctors", r"data doctors"),
-    ("Link Builders", r"link builders"),
+    ("Link Builders Cubicle Party", r"link builders"),
     ("Tech Talk", r"tech talk"),
     ("Azure & Eowyn", r"azure\s*&\s*eowyn"),
-    ("How-To", r"\bhow-?to\b|tutorial"),
+    ("#CemeterySpotlight", r"cemetery\s*spotlight"),
+    ("WikiTree Week", r"wikitree\s*week"),                 # not the same series as WikiGames
+    ("WikiGames", r"wiki\s*games?"),
+    ('Friday "Night" Bingo', r"bingo"),
+    ("12 Days of Elf-Mas", r"elf-?mas"),
+    ("WikiTree Meet Our Members", r"meet\s*our\s*members"),
+    ("Research Parties", r"research part(y|ies)"),
+    ("One Name Tuesday", r"one\s*name\s*tuesday"),
+    ("Project Showcase", r"project showcase"),
+    ("WikiTree How To", r"\bhow[- ]?to\b|tutorial"),
 ]
 OTHER_SERIES = "Other"
 

@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.1.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.1.1 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -86,6 +86,10 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
 - **Series.** A video's series is, in order: the owner's choice in `data/youtube_series.csv` (columns `video_id,series`), else
   its playlist (a `Playlist` column in the export, if you add one), else the title rules in `wtstats/config.py`
   (`SERIES_RULES`; the first match wins). After changing any of these, run `python -m wtstats reclassify`.
+- Every format is its own series, named like its YouTube playlist (WikiTree Week and WikiGames are separate; so are Tech Talk and
+  Link Builders, Ask Aleš and Member Q&A). Where a title *starts* decides between look-alikes: "#ConnectionFinder: ..." is
+  ConnectionFinder, while "Are you related ..." is Spotlight Profile Shorts even when it ends with the #ConnectionFinder tag.
+  Videos that match no rule are listed as "Other".
 - **Channel subscribers.** Export the channel's *Subscribers* by month from YouTube Studio (columns `Date`, `Subscribers`) and run
   `python -m wtstats import --monthly "Chart data.csv"`. `--monthly` treats every row as a whole month, whatever its date looks like.
   This is the whole channel, so it is higher than the per-video *Subscribers gained*, which only counts the (up to 500) videos listed.

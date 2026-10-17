@@ -12,27 +12,51 @@ def env(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("title,series", [
     ("WikiTree Tech Talk (April 2026)", "Tech Talk"),
-    ("Link Builders Cubicle Party (July 2026) w/host @Robinson-27225", "Link Builders"),
-    ("Ask Aleš: What Would You Like To Know About WikiTree Plus? w/host Greg Clarke (Feb 2026)", "Ask Aleš"),
-    ("Member Q & A via Zoom (Jul 2026) 1 of 2", "Member Q&A"),
+    ("Link Builders Cubicle Party (July 2026) w/host @Robinson-27225", "Link Builders Cubicle Party"),
+    ("Ask Ale\u0161: What Would You Like To Know About WikiTree Plus? w/host Greg Clarke (Feb 2026)", "WikiTree Ask Ale\u0161"),
+    ("Member Q & A via Zoom (Jul 2026) 1 of 2", "WikiTree Member Q&A"),
     ("Azure & Eowyn Answer Everything (19 Aug 2026) #Cemeteries Week on WikiTree", "Azure & Eowyn"),
-    ("Are you related or connected to Frank Ifield?", "Spotlight Profile Shorts"),
-    ("🎶 #FridaySpotlight Are you related or connected to Garth Hudson of The Band? 🎹", "Spotlight Profile Shorts"),
-    ("Declaration of Arbroath Connection Combat: Robert the Bruce vs Edward Longshanks", "ConnectionCheckers"),
-    ("Which #ConnectionCombat profile are you closest to MLK Jr or Henry the VIII?", "ConnectionCheckers"),
-    ("🧩This Week's #ConnectionCheckers features New Zealand's Finest! 🥝", "ConnectionCheckers"),
-    ("#ConnectionFinder: Which Indiana notable are you most closely connected to? Jackson-150", "ConnectionFinder"),
+    ("Declaration of Arbroath Connection Combat: Robert the Bruce vs Edward Longshanks", "#ConnectionCheckers"),
+    ("Which #ConnectionCombat profile are you closest to MLK Jr or Henry the VIII?", "#ConnectionCheckers"),
+    ("\U0001f9e9This Week's #ConnectionCheckers features New Zealand's Finest!", "#ConnectionCheckers"),
+    ("WikiTree #SaturdayRoundup (21 Feb 2026)", "WikiTree Saturday Roundup"),
     ("#WikiTreeDay2023 Global Project Trailer", "WikiTree Day"),
     ("WikiTree Day: Apps w/Greg", "WikiTree Day"),
+    ("WikiTree How To: Invite your family to WikiTree!", "WikiTree How To"),
+    # the formats the owner said are each their own series
+    ("WikiTree #CemeterySpotlight Berea Cemetery, Berea, Kentucky", "#CemeterySpotlight"),
+    ("#WikiTreeWeek2025 Monday (3 Nov 2025) Panel - Beyond the Narrative", "WikiTree Week"),
+    ("#2024WikiTreeWeek Countdown 5 days to go! Global Genealogy Spotlight!", "WikiTree Week"),
+    ("#2024WikiGames Long-Distance Locating Winner Ceremony", "WikiGames"),
+    ('WikiTree #WikiTree Friday "Night" Bingo + Bio Check App', 'Friday "Night" Bingo'),
+    ("12 Days of Elf-Mas Day Ten (31 Dec 2025)", "12 Days of Elf-Mas"),
+    ("#WikiTreeMeetOurMembers: Kahlil Thomas We're celebrating Kahlil", "WikiTree Meet Our Members"),
+    ("WikiTree 1776 Project Research Party (4 Feb 2026)", "Research Parties"),
+    ("#OneNameTuesday showcase: Sheldon", "One Name Tuesday"),
+    ("Project Showcase: England This project was started on WikiTree in 2018", "Project Showcase"),
     ("What is WikiTree?", "Other"),
 ])
 def test_series_rules_follow_the_owners_decisions(title, series):
     assert title_series(title) == series
 
 
-def test_are_you_related_wins_over_a_connectionfinder_tag():
-    # 14 real titles carry both; the owner said "are you related" is the Spotlight Profile Shorts series
-    assert title_series("Are you related or connected to Cass Elliot? Cohen-4015 #ConnectionFinder") == "Spotlight Profile Shorts"
+@pytest.mark.parametrize("title,series", [
+    # "Are you related ..." is Spotlight Profile Shorts, even when it carries the #ConnectionFinder tag
+    ("Are you related or connected to Frank Ifield?", "Spotlight Profile Shorts"),
+    ("Are you related or connected to Cass Elliot of @themamas? Cohen-4015 #ConnectionFinder", "Spotlight Profile Shorts"),
+    ("\U0001f3b6 #FridaySpotlight Are you related or connected to Garth Hudson of The Band? \U0001f3b9", "Spotlight Profile Shorts"),
+    ("\U0001f3ac FRIDAY SPOTLIGHT: Are you related or connected to Charlie Chaplin?", "Spotlight Profile Shorts"),
+    # ...while a title that STARTS with #ConnectionFinder is its own series
+    ("#ConnectionFinder: Which Indiana notable are you most closely connected to? Jackson-150", "ConnectionFinder"),
+    ("#ConnectionFinder: Are you related to the Kennedys?", "ConnectionFinder"),
+    ("#WikiTree - Which toy inventor are you most closely connected to? @Barbie #ConnectionFinder", "ConnectionFinder"),
+])
+def test_connection_finder_and_are_you_related_are_told_apart_by_how_the_title_starts(title, series):
+    assert title_series(title) == series
+
+
+def test_wikitree_week_and_wikigames_are_separate_series():
+    assert title_series("#WikiTreeWeek2024 DNA Features Chat w/Greg Clarke") != title_series("#2023WikiGames Closing Ceremony")
 
 
 def test_manual_choice_beats_playlist_beats_title_rules():
@@ -54,7 +78,7 @@ def test_playlist_column_files_the_video_and_a_blank_falls_back_to_the_title(env
     conn, raw, tmp = env
     f = tmp / "WikiTreers_YT_July_2026.csv"; f.write_text(YT)
     import_file(conn, f, raw_dir=raw)
-    assert dict(conn.execute("SELECT video_id, series FROM youtube_videos").fetchall()) == {"aaaaaaaaaaa": "Tech Talks", "bbbbbbbbbbb": "Member Q&A"}
+    assert dict(conn.execute("SELECT video_id, series FROM youtube_videos").fetchall()) == {"aaaaaaaaaaa": "Tech Talks", "bbbbbbbbbbb": "WikiTree Member Q&A"}
     assert dict(conn.execute("SELECT video_id, playlist FROM youtube_videos").fetchall()) == {"aaaaaaaaaaa": "Tech Talks", "bbbbbbbbbbb": None}
     assert "playlist" not in {m for (m,) in conn.execute("SELECT DISTINCT metric FROM youtube_stats")}   # not mistaken for a metric
 
