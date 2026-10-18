@@ -20,12 +20,14 @@ for _name in [m for m in sys.modules if m == "wtstats" or m.startswith("wtstats.
 from wtstats import __version__, config, quality  # noqa: E402
 from wtstats.series import daily_series, yoy_table, ytd_vs_prior  # noqa: E402
 
-INK = "#0b0b0b"
-INK_2 = "#52514e"
-INK_3 = "#6f6e69"
-GRID = "#e8e7e3"
-SURFACE = "#fcfcfb"
-BLUE = config.COLORS["facebook"]
+# Chart ink and grid sit on the WikiTree-green page background (see .streamlit/config.toml).
+INK = "#1c3023"
+INK_2 = "#3d5744"
+INK_3 = "#56695c"
+GRID = "#c4d49a"
+SURFACE = "#f6faea"
+FONT = "Calibri, Carlito, sans-serif"
+BAR = dict(color="#8FC641", line=dict(color="#25422D", width=1), cornerradius=4)  # WikiTree green, outlined to stand out on the page
 
 st.set_page_config(page_title="WikiTree Social Stats", page_icon=str(config.LOGO) if config.LOGO.exists() else "📊", layout="wide")
 st.markdown(
@@ -175,7 +177,7 @@ def multiples(panels: list[dict], ncols: int = 2, panel_height: int = 230) -> go
     fig.update_layout(
         height=max(panel_height * nrows, 260), margin=dict(l=8, r=8, t=36, b=8),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", hovermode="x",
-        font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+        font=dict(family=FONT, size=12, color=INK_2),
         hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID),
     )
     fig.update_xaxes(showgrid=False, linecolor=GRID, tickfont=dict(color=INK_3))
@@ -238,7 +240,7 @@ def yoy_figure(panels: list[tuple[str, pd.DataFrame]], roll: str = "Month", ncol
     fig.update_layout(
         height=max(panel_height * nrows, 300) + 30, margin=dict(l=8, r=8, t=84, b=8), hovermode="x unified",
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+        font=dict(family=FONT, size=12, color=INK_2),
         legend=dict(orientation="h", yref="container", y=1, yanchor="top", x=0, font=dict(color=INK_2)),
         hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
     fig.update_xaxes(showgrid=False, linecolor=GRID, tickfont=dict(color=INK_3), tickformat="%b")
@@ -262,13 +264,13 @@ def month_group_view(frame: pd.DataFrame, what: str, key: str, with_series: bool
 
     def bars(x, y, hover):
         fig = go.Figure(go.Bar(
-            x=x, y=y, marker=dict(color=BLUE, cornerradius=4), text=[f"{v:,.0f}" for v in y], textposition="outside",
+            x=x, y=y, marker=BAR, text=[f"{v:,.0f}" for v in y], textposition="outside",
             cliponaxis=False, textfont=dict(color=INK_2, size=12), customdata=hover,
             hovertemplate="%{x}<br>%{y:,.0f}<br>%{customdata}<extra></extra>"))
         fig.update_layout(
             height=300, margin=dict(l=8, r=8, t=24, b=8), bargap=0.45,
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+            font=dict(family=FONT, size=12, color=INK_2),
             yaxis=dict(gridcolor=GRID, zeroline=False, tickfont=dict(color=INK_3), separatethousands=True),
             xaxis=dict(tickfont=dict(color=INK), type="category"),
             hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
@@ -510,7 +512,7 @@ with tab_posts:
             fig.update_layout(
                 height=380, margin=dict(l=8, r=90, t=10, b=8), hovermode="x unified",
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+                font=dict(family=FONT, size=12, color=INK_2),
                 legend=dict(orientation="h", y=1.08, x=0, font=dict(color=INK_2)),
                 hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID),
                 yaxis=dict(gridcolor=GRID, zeroline=False, rangemode="tozero", tickfont=dict(color=INK_3), separatethousands=True),
@@ -622,14 +624,14 @@ with tab_yt:
         if total_series > YT_SERIES_TOP and not expanded:
             series = series.tail(YT_SERIES_TOP)
         fig = go.Figure(go.Bar(
-            x=series[metric], y=series.index, orientation="h", marker=dict(color=BLUE, cornerradius=4),
+            x=series[metric], y=series.index, orientation="h", marker=BAR,
             text=[f"{v:,.0f}" for v in series[metric]], textposition="outside", cliponaxis=False,
             textfont=dict(color=INK_2, size=12), customdata=series["videos"],
             hovertemplate="%{y}<br>%{x:,.0f} " + name(metric).lower() + " across %{customdata} videos<extra></extra>"))
         fig.update_layout(
             height=max(300, 34 * len(series) + 60), margin=dict(l=8, r=60, t=10, b=8), bargap=0.35,
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK_2),
+            font=dict(family=FONT, size=12, color=INK_2),
             xaxis=dict(gridcolor=GRID, zeroline=False, tickfont=dict(color=INK_3), separatethousands=True),
             yaxis=dict(tickfont=dict(color=INK)), hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
         st.subheader(f"{name(metric)} by series, {label}")

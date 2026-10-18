@@ -1,6 +1,17 @@
+# WikiTree brand: palette (gold #FCB815, orange #f37c26, greens #e5eecf #E1F0B4 #A5D167 #8FC641 #25422D) and fonts
+# (Roboto Mono for headings, Calibri for text). Calibri is used where the viewer has it, else Carlito, its metric-compatible
+# look-alike from Google Fonts.
 [theme]
 base = "light"
-primaryColor = "#2a78d6"
+primaryColor = "#25422D"
+backgroundColor = "#E5EECF"
+secondaryBackgroundColor = "#E1F0B4"
+textColor = "#25422D"
+linkColor = "#25422D"
+font = "Calibri, Carlito:https://fonts.googleapis.com/css2?family=Carlito:wght@400;700&display=swap, sans-serif"
+headingFont = "Roboto Mono:https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600;700&display=swap, monospace"
+codeFont = "Roboto Mono, monospace"
+headingFontSizes = ["2.4rem", "1.9rem", "1.4rem", "1.15rem", "1rem", "0.9rem"]
 
 [client]
 toolbarMode = "minimal"

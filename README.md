@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.5.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.6.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -99,6 +99,13 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
   A sheet never replaces a month that has an export, whichever is loaded first. Every month from Jan 2021 to Sep 2026 now has an export.
 - **Community posts.** The export mixes videos with community-page posts. It has no column for that, so any item with a duration of exactly
   16 seconds (`COMMUNITY_POST_DURATION_S`) is shown as a community post; the YouTube tab can show videos, posts or both.
+
+## Look and feel
+
+The colours and fonts are WikiTree's brand and live in `.streamlit/config.toml`: greens (`#e5eecf` page, `#E1F0B4` sidebar and
+fields, `#8FC641` chart bars, `#25422D` text and buttons), with gold `#FCB815` and orange `#f37c26` in the logo. Headings are
+Roboto Mono and text is Calibri; where a viewer doesn't have Calibri it falls back to Carlito, a look-alike loaded from Google Fonts.
+Chart text and grid colours are the `INK`, `GRID` and `FONT` constants at the top of `app.py`.
 
 ## Hosting (Streamlit Community Cloud)
 

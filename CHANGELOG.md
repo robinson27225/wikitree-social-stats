@@ -2,6 +2,11 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.6.0 - 2026-10-18
+
+- WikiTree brand look: greens for the page, sidebar and fields, dark green buttons and text; Roboto Mono headings and Calibri text
+  (Carlito where Calibri isn't installed). Charts use the same ink, grid and font.
+
 ## 1.5.0 - 2026-10-18
 
 - YouTube views by series: opens on the current year so far (the monthly exports added together), shows the top 10 series with a
