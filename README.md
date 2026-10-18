@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.3.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.4.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -89,12 +89,13 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
 - Every format is its own series, named like its YouTube playlist (WikiTree Week and WikiGames are separate; so are Tech Talk and
   Link Builders, Ask Aleš and Member Q&A). Where a title *starts* decides between look-alikes: "#ConnectionFinder: ..." is
   ConnectionFinder, while "Are you related ..." is Spotlight Profile Shorts even when it ends with the #ConnectionFinder tag.
-  Videos that match no rule are listed as "Other".
+  Videos that match no rule are listed as "Other"; `data/youtube_series.csv` files individual videos (the Nov 2024 Symposium sessions have no
+  identifying words in their titles, so they are listed there).
 - **Channel subscribers and views.** The whole channel's net subscribers and views per month. **A month's per-video export is the source:**
   its *Total* row is stored as that month's channel number (it covers every video, so it is higher than the sum of the listed ones, which
   are capped at 500). For months with no export, use a sheet or YouTube Studio's chart export as `Date,Subscribers,Views` and run
   `python -m wtstats import --monthly "Chart data.csv"`; `--monthly` treats every row as a whole month, whatever its date looks like.
-  A sheet never replaces a month that has an export, whichever is loaded first. Jan 2022 - Apr 2025 come from the owner's sheet so far.
+  A sheet never replaces a month that has an export, whichever is loaded first. Every month from Jan 2021 to Sep 2026 now has an export.
 - **Community posts.** The export mixes videos with community-page posts. It has no column for that, so any item with a duration of exactly
   16 seconds (`COMMUNITY_POST_DURATION_S`) is shown as a community post; the YouTube tab can show videos, posts or both.
 

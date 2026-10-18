@@ -2,6 +2,13 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.4.0 - 2026-10-18
+
+- YouTube monthly exports for every month from Jan 2021 to Sep 2026 are loaded, so every month's channel subscribers and views
+  come from its export.
+- New series: Events Committee; "Global Genealogy Spotlight" counts as Global Spotlight; the Nov 2024 Symposium sessions are filed
+  under WikiTree Symposium (`data/youtube_series.csv`).
+
 ## 1.3.0 - 2026-10-18
 
 - YouTube tab order: channel subscribers, channel views, then views by series.

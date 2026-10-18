@@ -61,6 +61,8 @@ def env(tmp_path, monkeypatch):
     ("March 2025 RAWK Reveal 16 April 2025", "RAWK"),
     ("December RAWK Wrap-up with host @fluteroots", "RAWK"),
     ("WikiTree Global Spotlight (Feb 2024)", "Global Spotlight"),
+    ("Global Genealogy Spotlight (October 2024): Haiti @DavidRandall-8651 @sandypatak", "Global Spotlight"),
+    ("Events Committee 20 Aug 2024", "Events Committee"),
     ("15 Nations Tour Wrap-up: Estonia w/@DavidRandall-8651", "15 Nations Global Tour"),
     ("WikiTree's 15 Nation Global Tour: Kenya Wrap-up", "15 Nations Global Tour"),
     ("\U0001f1eb\U0001f1f7 Join the France Project for a Disco(rd) Party!", "Disco(rd) Party"),
