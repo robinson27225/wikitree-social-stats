@@ -171,7 +171,7 @@ SERIES_RULES = [
     ("#FridayDateNight", r"friday\s*date\s*night"),
     ("#Hacktoberfest", r"hacktoberfest"),
     # LiveCasts and "Live with Sarah and Eowyn" are the Saturday Roundup (the owner's choice), so they come before RootsTech
-    ("WikiTree Saturday Roundup", r"live\s*cast|live with sarah"),
+    ("WikiTree Saturday Roundup", r"live\s*cast|live with sarah|wikitree live\b"),
     ("WikiTree Symposium", r"symposium"),
     ("RootsTech", r"rootstech"),
     ("WikiTree Tours", r"(wikitree|tree)\s*tours?"),

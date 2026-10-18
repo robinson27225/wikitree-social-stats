@@ -42,6 +42,7 @@ def env(tmp_path, monkeypatch):
     # LiveCasts and Live with Sarah and Eowyn are the Saturday Roundup (owner's choice), even a LiveCast at RootsTech
     ("WikiTree LiveCast (19 September 2020) - Weekly recap + tree chat about cousin bait", "WikiTree Saturday Roundup"),
     ("WikiTree Live with Sarah and Eowyn - Special Guest Susie MacLeod", "WikiTree Saturday Roundup"),
+    ("WikiTree Live: The Past & Future of WikiTree", "WikiTree Saturday Roundup"),
     ("LiveCast at RootsTech 2017", "WikiTree Saturday Roundup"),
     ("WikiTree at @familysearch #RootsTech2025 Take a tour of the booth", "RootsTech"),
     ("2024 WikiTree Symposium Countdown - 6 days to go!", "WikiTree Symposium"),
