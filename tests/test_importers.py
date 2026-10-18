@@ -258,3 +258,10 @@ def test_remove_keeps_values_a_later_import_replaced(env):
     (first_id, *_), = find_imports(conn, "fb1")
     remove_import(conn, first_id)
     assert rows(conn, "SELECT value FROM daily_metrics WHERE period_start='2026-01-01' AND metric='views'") == [(3000.0,)]
+
+
+def test_period_from_youtube_studio_folder_style_name():
+    from wtstats.importers import infer_period_from_name
+    assert infer_period_from_name("Content 2021-01-01_2021-02-01 WikiTree.csv") == ("2021-01-01", "2021-01-31")
+    assert infer_period_from_name("Content 2024-02-01_2024-03-01 WikiTree.csv") == ("2024-02-01", "2024-02-29")
+    assert infer_period_from_name("Content 2021-12-01_2022-01-01 WikiTree.csv") == ("2021-12-01", "2021-12-31")

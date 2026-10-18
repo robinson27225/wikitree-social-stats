@@ -145,6 +145,16 @@ def parse_period_arg(text: str) -> tuple[str, str]:
 def infer_period_from_name(name: str) -> tuple[str, str] | None:
     """'WikiTreers_YT_August_2026.csv' (or '..._2026-08.csv') -> August 2026, else None."""
     stem = Path(name).stem.lower()
+    # YouTube Studio's own export folders: "Content 2021-01-01_2021-02-01 WikiTree" (the end is the first day after the period)
+    if m := re.search(r"(20\d{2})-(\d{2})-(\d{2})[\s_]+(20\d{2})-(\d{2})-(\d{2})", stem):
+        try:
+            start, end = date(*map(int, m.groups()[:3])), date(*map(int, m.groups()[3:]))
+        except ValueError:
+            start = end = None
+        if start and end and end > start:
+            if end.day == 1:
+                end -= timedelta(days=1)
+            return start.isoformat(), end.isoformat()
     for word, year in re.findall(r"([a-z]+)[\s_.-]+(20\d{2})", stem):
         if word in _MONTH_NUMBERS:
             return month_span(int(year), _MONTH_NUMBERS[word])
