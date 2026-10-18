@@ -134,3 +134,13 @@ def find_gaps(conn: sqlite3.Connection) -> pd.DataFrame:
     return (out.groupby(["platform", "first_missing", "last_missing", "days"])["metric"]
                .apply(lambda m: ", ".join(sorted(m))).rename("metrics").reset_index()
                .sort_values(["platform", "first_missing"]).reset_index(drop=True))
+
+
+def note_known_gaps(gaps: pd.DataFrame) -> pd.DataFrame:
+    """Adds a Note column to `find_gaps` output for gaps the owner confirmed can't be filled (config.KNOWN_GAPS)."""
+    notes = []
+    for g in gaps.itertuples():
+        metrics = {m.strip() for m in g.metrics.split(",")}
+        notes.append(next((note for platform, metric, first, last, note in config.KNOWN_GAPS
+                           if g.platform == platform and metric in metrics and first <= g.first_missing and g.last_missing <= last), ""))
+    return gaps.assign(note=notes)

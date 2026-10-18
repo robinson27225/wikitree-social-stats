@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.4.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.4.1 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -64,7 +64,8 @@ Each file is recognised by its columns, so you do not say which channel it is:
   - Instagram *Interactions* Jan 1 - Aug 31, 2024, a copy of Facebook's (Facebook's are real; Instagram's should be blank).
   The rules and thresholds are in `wtstats/config.py`.
 - **People reached** for Facebook is Reach through Aug 2025 and Viewers from Sep 2025 (they agree in Aug 2025, when both were recorded). The chart marks the change with a dotted line (`CHART_BREAKS` in `wtstats/config.py`).
-- **LinkedIn followers** come from the manually filled sheets through Dec 2024 and LinkedIn's own export from Oct 16, 2025; nothing was recorded in between (the Data tab lists it as a gap).
+- **LinkedIn followers** come from the manually filled sheets through Dec 2024 and LinkedIn's own export from Oct 16, 2025. Jan 1 - Oct 15, 2025 was never recorded and is lost (the Data tab lists it as a gap, with a note).
+- **Instagram interactions** for Jun 2025 and Aug 1-21, 2025 can't be filled: Meta's *Content interactions* only exists from Aug 22, 2025, and its export shows 0 before that (not available, not zero).
 - **Gaps** (days with no value) are listed on the *Data & quality* tab. A blank is not a zero, so totals that include them are understated.
 - Small negatives (-1) in TikTok comments and LinkedIn comments or reposts are deletions in the export and are kept; follower changes are net and can be negative.
 - Scheduler totals are as of the export and are kept apart from the account-level numbers, because they measure different things.

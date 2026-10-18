@@ -676,13 +676,13 @@ with tab_data:
         fl["Channel"] = fl["Channel"].map(config.LABELS)
         st.dataframe(fl, width="stretch", hide_index=True)
     st.subheader("Gaps in the data")
-    gaps = quality.find_gaps(sqlite3.connect(config.DB_PATH))
+    gaps = quality.note_known_gaps(quality.find_gaps(sqlite3.connect(config.DB_PATH)))
     if gaps.empty:
         st.write("None.")
     else:
         gaps["platform"] = gaps["platform"].map(config.LABELS)
         st.dataframe(gaps.rename(columns={"platform": "Channel", "first_missing": "From", "last_missing": "To",
-                                          "days": "Days", "metrics": "Metrics with no value"}),
+                                          "days": "Days", "metrics": "Metrics with no value", "note": "Note"}),
                      width="stretch", hide_index=True)
         st.caption("A blank is not a zero. Weekly and monthly totals that include these days are understated.")
     st.subheader("Reading the numbers")

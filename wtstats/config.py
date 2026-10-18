@@ -119,6 +119,14 @@ BELOW_CHECKS = [
      "Viewers is used from here"),
 ]
 
+# (platform, metric, first_day, last_day, note): gaps the owner has confirmed can't be filled, so the Data tab says so.
+KNOWN_GAPS = [
+    ("instagram", "interactions", "2025-06-01", "2025-08-21",
+     "Not recoverable: Meta's Content interactions only exists from Aug 22, 2025 (its export shows 0 before that, which means not available)."),
+    ("linkedin", "followers", "2025-01-01", "2025-10-15",
+     "Lost: never recorded, and LinkedIn's own export does not go back this far."),
+]
+
 # (family, platform) -> [(date, label)]: a dotted line on that chart where the measure changes.
 CHART_BREAKS = {
     ("audience", "facebook"): [("2025-09-01", "Reach \u2192 Viewers")],

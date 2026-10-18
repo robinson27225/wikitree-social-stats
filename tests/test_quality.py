@@ -124,3 +124,15 @@ def test_ytd_vs_prior_compares_the_same_dates():
     r = ytd_vs_prior(s)
     assert r["year"] == 2026 and r["cur"] == 69 and r["prev"] == 69   # Jan 1-Mar 10 each year (2026 has no leap day)
     assert ytd_vs_prior(_daily("2025-06-01", "2026-03-10"))["prev"] is None   # no data back to Jan 1, 2025
+
+
+def test_confirmed_unrecoverable_gaps_carry_a_note():
+    import pandas as pd
+    from wtstats import quality
+    gaps = pd.DataFrame([
+        ("instagram", "2025-06-01", "2025-06-30", 30, "interactions"),
+        ("instagram", "2025-09-10", "2025-09-12", 3, "interactions"),
+        ("linkedin", "2025-01-01", "2025-10-15", 288, "followers"),
+    ], columns=["platform", "first_missing", "last_missing", "days", "metrics"])
+    notes = quality.note_known_gaps(gaps)["note"].tolist()
+    assert notes[0].startswith("Not recoverable") and notes[1] == "" and notes[2].startswith("Lost")
