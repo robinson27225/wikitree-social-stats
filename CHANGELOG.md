@@ -2,6 +2,15 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.3.0 - 2026-10-18
+
+- YouTube tab order: channel subscribers, channel views, then views by series.
+- New series: RAWK, Global Spotlight, 15 Nations Global Tour, Disco(rd) Party, Watchlist Weevil Challenge, Alabama Challenge,
+  Welcome to WikiTree, Why I Love WikiTree, Global Family Reunion, NEWT Team, WikiTree Holocaust Project, One Million Members.
+- "Which ... are you most closely connected to?" videos are ConnectionFinder; the "Over N profiles. Countless connections."
+  community posts are One Name Tuesday; "FRIDAY SPOTLIGHT" titles are Spotlight Profile Shorts.
+- YouTube monthly exports Jan - Apr 2025 loaded (so Jan 2025 - Sep 2026 is complete).
+
 ## 1.2.2 - 2026-10-17
 
 - Channel subscribers and views per month now always come from the month's per-video export (its Total row); a sheet only

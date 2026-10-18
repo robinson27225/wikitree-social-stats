@@ -51,6 +51,21 @@ def env(tmp_path, monkeypatch):
     ("New Member Chat (September 2025)", "WikiTree New Members"),
     ("WikiTree Heritage Exchange Video Series: #1 Intro to Heritage Exchange", "WikiTree Heritage Exchange"),
     ("WikiTree Easter Egg Hunt (2026)", "WikiTree Easter Egg Hunt"),
+    ("Which King are you most closely connected to? Tudor-4", "ConnectionFinder"),
+    ("Which @DoctorWho are you most closely connected to? #DoctorWho", "ConnectionFinder"),
+    ("Over 500 Broadwell profiles. Countless connections. One collaborative effort. This is the power of One Name Tuesday", "One Name Tuesday"),
+    ("\U0001f3ac FRIDAY SPOTLIGHT: Jason Momoa Family Connections!", "Spotlight Profile Shorts"),
+    ("Ask @Ale\u0161Trtnik-e6z w/@uptergroveGreg What Do You Want To Know About WikiTree Plus? (June 2023)", "WikiTree Ask Ale\u0161"),
+    ("Play this week's Big Tree Bowl: Super Bowl Performers Connections Checkers", "#ConnectionCheckers"),
+    ("March 2025 RAWK Reveal 16 April 2025", "RAWK"),
+    ("December RAWK Wrap-up with host @fluteroots", "RAWK"),
+    ("WikiTree Global Spotlight (Feb 2024)", "Global Spotlight"),
+    ("15 Nations Tour Wrap-up: Estonia w/@DavidRandall-8651", "15 Nations Global Tour"),
+    ("WikiTree's 15 Nation Global Tour: Kenya Wrap-up", "15 Nations Global Tour"),
+    ("\U0001f1eb\U0001f1f7 Join the France Project for a Disco(rd) Party!", "Disco(rd) Party"),
+    ("Watchlist Weevil Challenge - Week Two w/@Robinson-27225", "Watchlist Weevil Challenge"),
+    ("Alabama Challenge: 1st Month - Africatown Plateau Cemetery 14 July 2024", "Alabama Challenge"),
+    ("Welcome to WikiTree Series: Privacy", "Welcome to WikiTree"),
 ])
 def test_series_rules_follow_the_owners_decisions(title, series):
     assert title_series(title) == series

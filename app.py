@@ -547,6 +547,19 @@ def span_label(start: pd.Timestamp, end: pd.Timestamp, is_month: bool) -> str:
 
 
 with tab_yt:
+    # Top of the tab: the whole channel's subscribers, then its views, then views by series (below).
+    chan_subs, chan_views = load_channel(ver, "subscribers"), load_channel(ver, "views")
+    if chan_subs.empty and chan_views.empty:
+        st.info("No channel-level numbers loaded yet. Import the channel's monthly Date, Subscribers and Views export "
+                "(`python -m wtstats import --monthly file.csv`). The per-video numbers below only count the videos listed.")
+    else:
+        st.caption("The whole channel, per month: net subscribers gained, then views. A month's own export is the source; the "
+                   "per-video numbers further down only count the (up to 500) videos listed in each export.")
+        for chan, what, key in ((chan_subs, "Subscribers", "yt_subs_group"), (chan_views, "Views", "yt_chanviews_group")):
+            if not chan.empty:
+                st.subheader(f"Channel {what.lower()}")
+                month_group_view(chan, what, key, False)
+        st.divider()
     shown = "Videos and posts"
     if yt.empty:
         st.info("No YouTube export loaded yet.")
@@ -608,19 +621,6 @@ with tab_yt:
             st.subheader(f"{name(metric)}, by month")
             month_group_view(in_months[["period_start", "value", "series"]], name(metric), "yt_group", True)
             st.caption("Each month counts the videos listed in that month's export (up to 500).")
-
-        st.subheader("Channel subscribers and views")
-        chan_subs, chan_views = load_channel(ver, "subscribers"), load_channel(ver, "views")
-        if chan_subs.empty and chan_views.empty:
-            st.info("No channel-level numbers loaded yet. Import the channel's monthly Date, Subscribers and Views export "
-                    "(`python -m wtstats import --monthly file.csv`). The per-video numbers above only count the videos listed.")
-        else:
-            st.caption("The whole channel, per month: net subscribers gained and views. The per-video numbers above only count "
-                       "the (up to 500) videos listed in each export.")
-            for chan, what, key in ((chan_subs, "Subscribers", "yt_subs_group"), (chan_views, "Views", "yt_chanviews_group")):
-                if not chan.empty:
-                    st.markdown(f"**{what}**")
-                    month_group_view(chan, what, key, False)
 
         st.subheader("Videos")
         f1, f2 = st.columns([2, 3])

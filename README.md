@@ -2,7 +2,7 @@
 
 # WikiTree Social Stats
 
-Version 1.2.2 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
+Version 1.3.0 (see [CHANGELOG.md](CHANGELOG.md)) · [Social scheduler](https://wikitree-social-scheduler.fly.dev/)
 
 Loads exported social media numbers into a small SQLite database and shows them in a Streamlit dashboard.
 
@@ -77,7 +77,7 @@ Channel rules (which columns identify a platform, what to drop, blank handling, 
 - **Over time** or **Year over year** (Overview and Channels): year over year lays every year with data over Jan-Dec, one
   line per year (each year has its own colour; the latest is the thickest). It uses whole months or weeks only, ignores the date range, and each card compares
   the year so far with the same dates a year earlier. Running totals (TikTok follower total) are left out.
-- **YouTube:** group the monthly files by **Month**, **Year** or **Year over year**. *Channel subscribers* shows the whole
+- **YouTube:** the tab opens with the channel's subscribers, then its views, then views by series. Group the monthly files by **Month**, **Year** or **Year over year**. *Channel subscribers* shows the whole
   channel's net subscribers per month.
 - A dotted line marks where a measure changes (`CHART_BREAKS`).
 
