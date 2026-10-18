@@ -1,6 +1,7 @@
 """WikiTree Social Stats dashboard.   Run:  streamlit run app.py"""
 from __future__ import annotations
 
+import base64
 import calendar
 import math
 import sqlite3
@@ -29,11 +30,12 @@ SURFACE = "#f6faea"
 FONT = "Calibri, Carlito, sans-serif"
 BAR = dict(color="#8FC641", line=dict(color="#25422D", width=1), cornerradius=4)  # WikiTree green, outlined to stand out on the page
 
-st.set_page_config(page_title="WikiTree Social Stats", page_icon=str(config.LOGO) if config.LOGO.exists() else "📊", layout="wide")
+st.set_page_config(page_title="WikiTree Social Stats", page_icon="📈", layout="wide")
 st.markdown(
     """<style>
-    .block-container {padding-top: 2rem; max-width: 1280px;}
+    .block-container {padding-top: 4rem; max-width: 1280px;}
     [data-testid="stMetricValue"] {font-size: 1.6rem;}
+    .stLinkButton a, .stLinkButton a * {color: #25422D !important; font-weight: 600;}  /* dark text on the gold button */
     </style>""",
     unsafe_allow_html=True,
 )
@@ -115,7 +117,7 @@ def family_series(daily: pd.DataFrame, family: str, rollup: str) -> pd.DataFrame
         if rollup == "Day":
             s = d
         elif rollup == "Week":
-            s = d.groupby(d.index.to_period("W-SUN").start_time).sum()
+            s = d.groupby(d.index.to_period(config.WEEK_PERIOD).start_time).sum()
         else:
             s = d.groupby(d.index.to_period("M").start_time).sum()
             names = [n for m in metrics for n in m.split("|")]
@@ -132,7 +134,7 @@ def metric_series(daily: pd.DataFrame, platform: str, metric: str, rollup: str) 
     d = sub.set_index("period_start")["value"].sort_index()
     how = "last" if metric in config.NON_ADDITIVE_METRICS else "sum"   # a running total is not summed
     if rollup == "Week":
-        d = d.groupby(d.index.to_period("W-SUN").start_time).agg(how)
+        d = d.groupby(d.index.to_period(config.WEEK_PERIOD).start_time).agg(how)
     elif rollup == "Month":
         d = d.groupby(d.index.to_period("M").start_time).agg(how)
     return d
@@ -318,10 +320,20 @@ ver = _db_version()
 daily, posts, yt = load_daily(ver), load_posts(ver), load_youtube(ver)
 day_rows = daily[daily.granularity == "day"]
 
-head_logo, head_title = st.columns([1, 14], vertical_alignment="center")
-if config.LOGO.exists():
-    head_logo.image(str(config.LOGO), width=64)
-head_title.title("WikiTree Social Stats")
+@st.cache_resource
+def _header_logo_html() -> str:
+    """The logo as an inline image beside the title: one flex row, so it can't be clipped by a narrow column."""
+    if not config.LOGO_HEADER.exists():
+        return ""
+    data = base64.b64encode(config.LOGO_HEADER.read_bytes()).decode()
+    return f'<img src="data:image/png;base64,{data}" alt="" style="height:3.5rem;width:3.5rem;flex:none;display:block">'
+
+
+st.markdown(
+    f'<div style="display:flex;align-items:center;gap:1rem;margin:0 0 0.5rem">{_header_logo_html()}'
+    '<h1 style="margin:0;padding:0;line-height:1.15">WikiTree Social Stats</h1></div>',
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.header("View")
@@ -332,9 +344,9 @@ with st.sidebar:
     rng = st.date_input("Date range", (start_default, end_default), min_value=lo, max_value=hi,
                         help="Applies to the account-level charts. Data runs to " + hi.strftime("%b %d, %Y") + ".")
     rollup = st.radio("Roll up by", ["Day", "Week", "Month"], horizontal=True, index=0)
-    st.caption("Weeks start on Monday. The first and last bucket of a range can be partial.")
+    st.caption("Weeks start on Sunday. The first and last bucket of a range can be partial.")
     st.divider()
-    st.link_button("Social scheduler \u2197", config.SCHEDULER_URL, help="Opens the WikiTree social scheduler in a new tab.")
+    st.link_button("Social scheduler \u2197", config.SCHEDULER_URL, type="primary", help="Opens the WikiTree social scheduler in a new tab.")
     st.caption(f"Dates are as exported. Scheduler dates are the published date in {config.TIMEZONE.split('/')[1].replace('_', ' ')} time.")
     st.caption(f"Version {__version__} \u00b7 data through {end_default:%b %d, %Y}")
 

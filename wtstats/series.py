@@ -4,6 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from . import config
+
 
 def daily_series(daily: pd.DataFrame, platform: str, metrics: list[str]) -> pd.Series:
     """One value per day for a platform: the listed metrics summed.
@@ -39,7 +41,7 @@ def yoy_table(s: pd.Series, rollup: str = "Month") -> pd.DataFrame:
         return pd.DataFrame()
     first, last = s.index.min().normalize(), s.index.max().normalize()
     if rollup == "Week":
-        start = s.index.to_period("W-SUN").start_time
+        start = s.index.to_period(config.WEEK_PERIOD).start_time
         end = start + pd.Timedelta(days=6)
         pos = (start.dayofyear.to_numpy() - 1) // 7 + 1  # a week starting Dec 29-31 would be week 53; it straddles the year-end, so it is dropped
     else:

@@ -106,7 +106,7 @@ def test_yoy_table_has_a_column_per_year_and_drops_incomplete_months():
 
 def test_yoy_table_weeks_use_whole_weeks_only():
     from wtstats.series import yoy_table
-    t = yoy_table(_daily("2024-01-03", "2025-02-20"), "Week")        # Wed start, Thu end
+    t = yoy_table(_daily("2024-01-10", "2025-02-20"), "Week")        # Wed start, Thu end
     vals = t.to_numpy().ravel()
     assert (vals[~pd.isna(vals)] == 7).all()                         # every filled cell is exactly one whole week
     assert pd.isna(t.loc[1, 2024])                                   # the first, partial week is out
@@ -136,3 +136,12 @@ def test_confirmed_unrecoverable_gaps_carry_a_note():
     ], columns=["platform", "first_missing", "last_missing", "days", "metrics"])
     notes = quality.note_known_gaps(gaps)["note"].tolist()
     assert notes[0].startswith("Not recoverable") and notes[1] == "" and notes[2].startswith("Lost")
+
+
+def test_yoy_weeks_start_on_sunday():
+    import pandas as pd
+    from wtstats.series import yoy_table
+    s = pd.Series(1.0, index=pd.date_range("2024-01-03", "2025-03-31"))   # starts on a Wednesday
+    t = yoy_table(s, "Week")
+    assert t.loc[1, 2024] == 7                   # the first whole week is Sun Jan 7 - Sat Jan 13, so it is week 1
+    assert (t.loc[:, 2024].dropna() == 7).all()

@@ -2,6 +2,12 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.7.0 - 2026-10-18
+
+- Dark green sidebar with white text and a gold Social scheduler button; a paler page background (#edf0e6).
+- Weeks now start on Sunday (week roll-ups and year-over-year weeks).
+- The browser tab shows a chart icon instead of the logo, and the page logo is no longer clipped at the top.
+
 ## 1.6.0 - 2026-10-18
 
 - WikiTree brand look: greens for the page, sidebar and fields, dark green buttons and text; Roboto Mono headings and Calibri text

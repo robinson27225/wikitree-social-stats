@@ -4,7 +4,7 @@
 [theme]
 base = "light"
 primaryColor = "#25422D"
-backgroundColor = "#E5EECF"
+backgroundColor = "#EDF0E6"
 secondaryBackgroundColor = "#E1F0B4"
 textColor = "#25422D"
 linkColor = "#25422D"
@@ -12,6 +12,14 @@ font = "Calibri, Carlito:https://fonts.googleapis.com/css2?family=Carlito:wght@4
 headingFont = "Roboto Mono:https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600;700&display=swap, monospace"
 codeFont = "Roboto Mono, monospace"
 headingFontSizes = ["2.4rem", "1.9rem", "1.4rem", "1.15rem", "1rem", "0.9rem"]
+
+# Dark green sidebar with white text; gold for the selected options.
+[theme.sidebar]
+backgroundColor = "#25422D"
+secondaryBackgroundColor = "#355B3E"
+textColor = "#FFFFFF"
+primaryColor = "#FCB815"
+linkColor = "#FCB815"
 
 [client]
 toolbarMode = "minimal"

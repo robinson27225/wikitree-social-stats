@@ -14,11 +14,14 @@ DB_PATH = DATA_DIR / "stats.db"
 RAW_DIR = DATA_DIR / "raw"
 ASSETS_DIR = ROOT / "assets"
 LOGO = ASSETS_DIR / "logo.png"
+LOGO_HEADER = ASSETS_DIR / "logo_header.png"  # a small copy for the page header
 SCHEDULER_URL = "https://wikitree-social-scheduler.fly.dev/"
 
 # Dates in every export are used as given. The scheduler export is the
 # *published* date in Pacific time; the platform exports are the platforms' own days.
 TIMEZONE = "America/Los_Angeles"
+# Weeks start on Sunday (pandas calls a Sunday-to-Saturday week "W-SAT").
+WEEK_PERIOD = "W-SAT"
 
 PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin", "youtube", "threads", "bluesky", "mastodon"]
 LABELS = {
