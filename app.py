@@ -540,6 +540,9 @@ YT_NAMES = {
 }
 
 
+YT_SERIES_TOP = 10
+
+
 def span_label(start: pd.Timestamp, end: pd.Timestamp, is_month: bool) -> str:
     if is_month:
         return f"{start:%B %Y}"
@@ -579,17 +582,32 @@ with tab_yt:
         spans = spans.sort_values(["is_month", "end"], ascending=False)  # latest month first, then date ranges
         months = spans[spans.is_month].sort_values("end")
 
+        # The latest year comes first, so the bars open on the current year (the sum of its monthly exports).
+        year_labels = {}
+        for y in sorted(months.end.dt.year.unique(), reverse=True):
+            ms = months[months.end.dt.year == y]
+            year_labels[f"{y}" if len(ms) == 12 else f"{y} so far ({ms.start.min():%b}\u2013{ms.end.max():%b})"] = y
+
         c1, c2 = st.columns(2)
-        label = c1.selectbox("Period", spans.label.tolist())
-        sel = spans[spans.label == label].iloc[0]
-        cur = yt[(yt.period_start == sel.period_start) & (yt.period_end == sel.period_end)]
+        label = c1.selectbox("Period", list(year_labels) + spans.label.tolist())
+        is_year = label in year_labels
+        if is_year:
+            in_year = yt.merge(months[["period_start", "period_end"]], on=["period_start", "period_end"])
+            cur = in_year[pd.to_datetime(in_year.period_end).dt.year == year_labels[label]]
+            cur = cur.groupby(["video_id", "metric"], as_index=False)["value"].sum()
+        else:
+            sel = spans[spans.label == label].iloc[0]
+            cur = yt[(yt.period_start == sel.period_start) & (yt.period_end == sel.period_end)]
         wide = cur.pivot(index="video_id", columns="metric", values="value").reset_index().merge(
             yt.drop_duplicates("video_id")[["video_id", "title", "published_date", "series", "kind"]], on="video_id")
         have = [m for m in YT_NAMES if m in wide.columns] + [m for m in wide.columns if m not in YT_NAMES and m not in
                                                               {"video_id", "title", "published_date", "series", "kind"}]
         name = lambda m: YT_NAMES.get(m, m.replace("_", " ").capitalize())
         metric = c2.selectbox("Measure", have, format_func=name)
-        if sel.is_month:
+        if is_year:
+            st.caption(f"{label}: the monthly exports added together. Each lists the top 500 videos by likes, so a video that is "
+                       "missing from a month is not necessarily zero.")
+        elif sel.is_month:
             st.caption(f"{label}: activity during that month only. The export lists each video's top 500 by likes, so a video "
                        "that is missing from a month is not necessarily zero.")
         else:
@@ -598,6 +616,11 @@ with tab_yt:
         series = wide.groupby("series").agg(videos=("video_id", "count"), **{metric: (metric, "sum")}).dropna().sort_values(metric)
         if metric == "subscribers":
             series = series[series[metric] != 0]  # a series that gained no subscribers is left off
+        # Top ten by default; a button shows them all. `series` is sorted ascending, so the largest are at the end.
+        expanded = st.session_state.get("yt_series_all", False)
+        total_series = len(series)
+        if total_series > YT_SERIES_TOP and not expanded:
+            series = series.tail(YT_SERIES_TOP)
         fig = go.Figure(go.Bar(
             x=series[metric], y=series.index, orientation="h", marker=dict(color=BLUE, cornerradius=4),
             text=[f"{v:,.0f}" for v in series[metric]], textposition="outside", cliponaxis=False,
@@ -611,6 +634,9 @@ with tab_yt:
             yaxis=dict(tickfont=dict(color=INK)), hoverlabel=dict(bgcolor=SURFACE, font=dict(color=INK, size=12), bordercolor=GRID))
         st.subheader(f"{name(metric)} by series, {label}")
         show(fig)
+        if total_series > YT_SERIES_TOP:
+            st.button("Show the top 10 only" if expanded else f"Show all {total_series} series", key="yt_series_btn",
+                      on_click=lambda: st.session_state.update(yt_series_all=not expanded))
 
         in_months = yt[yt.metric == metric].merge(months[["period_start", "period_end", "label"]], on=["period_start", "period_end"])
         order = months.label.tolist()

@@ -64,3 +64,26 @@ def test_series_that_gained_no_subscribers_are_left_off_the_youtube_bars():
         if isinstance(x, dict):  # plotly sends numeric arrays as base64
             x = np.frombuffer(base64.b64decode(x["bdata"]), dtype=np.dtype(x["dtype"]))
         assert all(v != 0 for v in x)
+
+
+def _bar_labels(at):
+    import json
+    bars = [json.loads(c.proto.spec)["data"][0] for c in at.get("plotly_chart")]
+    return [b for b in bars if b.get("orientation") == "h"]
+
+
+def test_youtube_views_by_series_open_on_the_current_year_with_the_top_ten_and_a_button_for_all():
+    at = AppTest.from_file(str(APP), default_timeout=90).run()
+    period = [s for s in at.selectbox if s.label == "Period"]
+    if not period:
+        pytest.skip("no YouTube data loaded")
+    assert period[0].value.startswith(str(max(int(o[:4]) for o in period[0].options if o[:4].isdigit())))
+    assert not at.exception
+    assert len(_bar_labels(at)[0]["y"]) <= 10
+    button = [b for b in at.button if b.key == "yt_series_btn"]
+    assert button and "Show all" in button[0].label
+    button[0].click().run()
+    assert not at.exception
+    assert len(_bar_labels(at)[0]["y"]) > 10
+    again = [b for b in at.button if b.key == "yt_series_btn"][0]
+    assert "top 10" in again.label

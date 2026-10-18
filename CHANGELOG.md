@@ -2,6 +2,11 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.5.0 - 2026-10-18
+
+- YouTube views by series: opens on the current year so far (the monthly exports added together), shows the top 10 series with a
+  button to show all, and *Period* now also offers each whole year.
+
 ## 1.4.1 - 2026-10-18
 
 - Data tab: the two gaps that can't be filled (Instagram interactions Jun and Aug 1-21, 2025; LinkedIn followers Jan 1 - Oct 15, 2025) now say so.
