@@ -14,6 +14,7 @@ DB_PATH = DATA_DIR / "stats.db"
 RAW_DIR = DATA_DIR / "raw"
 ASSETS_DIR = ROOT / "assets"
 LOGO = ASSETS_DIR / "logo.png"
+APP_ICON = ASSETS_DIR / "social-stats.png"  # the program icon, shown in the browser tab
 LOGO_HEADER = ASSETS_DIR / "logo_header.png"  # a small copy for the page header
 SCHEDULER_URL = "https://wikitree-social-scheduler.fly.dev/"
 

@@ -30,7 +30,7 @@ SURFACE = "#f6faea"
 FONT = "Calibri, Carlito, sans-serif"
 BAR = dict(color="#8FC641", line=dict(color="#25422D", width=1), cornerradius=4)  # WikiTree green, outlined to stand out on the page
 
-st.set_page_config(page_title="WikiTree Social Stats", page_icon="📈", layout="wide")
+st.set_page_config(page_title="WikiTree Social Stats", page_icon=str(config.APP_ICON) if config.APP_ICON.exists() else "📈", layout="wide")
 st.markdown(
     """<style>
     .block-container {padding-top: 4rem; max-width: 1280px;}

@@ -2,6 +2,10 @@
 
 The version is `wtstats.__version__` and is shown in the dashboard sidebar. Bump it, and add an entry here, with each release.
 
+## 1.7.1 - 2026-11-23
+
+- The browser tab shows the program icon (assets/social-stats.png) instead of an emoji.
+
 ## 1.7.0 - 2026-10-18
 
 - Dark green sidebar with white text and a gold Social scheduler button; a paler page background (#edf0e6).
